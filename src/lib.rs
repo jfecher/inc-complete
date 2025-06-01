@@ -1,4 +1,8 @@
-use std::{any::Any, collections::HashMap, hash::{ Hasher, Hash }};
+use std::{
+    any::Any,
+    collections::HashMap,
+    hash::{Hash, Hasher},
+};
 
 use petgraph::graph::DiGraph;
 
@@ -70,14 +74,20 @@ impl<F: Run + Copy + Eq + Hash + Clone> Db<F> {
                     let cell = &mut self.cells[cell_id.0];
                     cell.last_verified_version = self.version;
                 }
-            } else /* cell.result is None, initialize it */ {
+            } else
+            /* cell.result is None, initialize it */
+            {
                 self.update_cell(cell_id);
             }
         }
 
         let cell = &self.cells[cell_id.0];
-        let result = cell.result.as_ref()
-            .expect("cell result should have been computed already").1.as_ref();
+        let result = cell
+            .result
+            .as_ref()
+            .expect("cell result should have been computed already")
+            .1
+            .as_ref();
 
         result
             .downcast_ref()
@@ -193,5 +203,52 @@ mod tests {
         let a3 = db.get_cell(Basic::A3);
         assert_eq!(a3.last_updated_version, expected_version);
         assert_eq!(a3.last_verified_version, expected_version);
+    }
+
+    #[test]
+    fn early_cutoff() {
+        #[derive(Clone, Copy, PartialEq, Eq, Hash)]
+        enum EarlyCutoff {
+            Numerator,
+            Denominator,
+            Division,
+            DenominatorIs0,
+            Result,
+        }
+
+        impl Run for EarlyCutoff {
+            fn run(self, db: &mut Db<Self>) -> impl std::any::Any + std::hash::Hash {
+                use EarlyCutoff::*;
+                match self {
+                    Numerator => 4,
+                    Denominator => 2,
+                    Division => db.get::<i32>(Numerator) / db.get::<i32>(Denominator),
+                    DenominatorIs0 => *db.get::<i32>(Denominator) == 0,
+                    Result => {
+                        if *db.get(DenominatorIs0) {
+                            0
+                        } else {
+                            *db.get(Division)
+                        }
+                    }
+                }
+            }
+        }
+
+        {
+            // Run from scratch with Denominator = 0
+            let mut db = Db::new();
+            assert_eq!(*db.get(EarlyCutoff::Result), 0i32);
+        }
+
+        {
+            // Start with Denominator = 2, then recompute with Denominator = 0
+            let mut db = Db::new();
+            assert_eq!(*db.get(EarlyCutoff::Result), 2i32);
+
+            db.update_input(EarlyCutoff::Denominator, 0);
+            // Shouldn't get a divide by zero here
+            assert_eq!(*db.get(EarlyCutoff::Result), 0i32);
+        }
     }
 }
