@@ -1,15 +1,14 @@
 [package]
 name = "inc-complete"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 authors = ["Jake Fecher <jfecher11@gmail.com>"]
 readme = "README.md"
 license-file = "LICENSE"
 keywords = ["incremental", "compilation", "compiler", "spreadsheet"]
 description = "A library for writing incremental computations that re-execute the minimum number of steps when an input is changed"
-homepage = "https://github.com/jfecher/inc-complete"
 repository = "https://github.com/jfecher/inc-complete"
-documentation = "https://docs.rs/goldentests"
+documentation = "https://docs.rs/inc-complete"
 
 [dependencies]
 petgraph = "0.8"
