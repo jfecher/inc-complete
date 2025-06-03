@@ -5,11 +5,15 @@ use petgraph::graph::DiGraph;
 
 mod cell;
 mod db_handle;
+mod interned;
 mod value;
 
 use value::HashEqObj;
+use cell::CellValue;
+
 pub use value::Run;
 pub use value::Value;
+pub use cell::Cell;
 
 const START_VERSION: u32 = 1;
 
@@ -18,28 +22,6 @@ pub struct Db<F> {
     version: u32,
 
     input_to_cell: HashMap<F, Cell>,
-}
-
-#[derive(Debug, Copy, Clone)]
-pub struct Cell(petgraph::graph::NodeIndex);
-
-struct CellValue<F> {
-    compute: F,
-    result: Option<(u64, Value)>,
-
-    last_updated_version: u32,
-    last_verified_version: u32,
-}
-
-impl<F> CellValue<F> {
-    fn new(compute: F) -> Self {
-        Self {
-            compute,
-            result: None,
-            last_updated_version: 0,
-            last_verified_version: 0,
-        }
-    }
 }
 
 impl<F> Db<F> {
@@ -64,31 +46,29 @@ impl<F: Run + Copy + Eq + Hash + Clone> Db<F> {
         let cell_id = self.cell(compute);
         self.update_cell(cell_id);
 
-        let cell = &self.cells[cell_id.0];
-        let result = &cell
-            .result
-            .as_ref()
-            .expect("cell result should have been computed already")
-            .1;
+        let cell = &self.cells[cell_id.index()];
+        let result = cell.result().expect("cell result should have been computed already");
 
         result.downcast_obj_ref()
             .expect("Output type to `Db::get` does not match the type of the value returned by the `Run::run` function")
     }
 
-    pub fn update_cell(&mut self, cell_id: Cell)
+    /// Trigger an update of the given cell, recursively checking and re-running any out of date
+    /// dependencies.
+    fn update_cell(&mut self, cell_id: Cell)
     where
         F: std::fmt::Debug,
     {
-        let cell = &self.cells[cell_id.0];
+        let cell = &self.cells[cell_id.index()];
 
         if cell.last_verified_version != self.version {
             if cell.result.is_some() {
-                let neighbors = self.cells.neighbors(cell_id.0).collect::<Vec<_>>();
+                let neighbors = self.cells.neighbors(cell_id.index()).collect::<Vec<_>>();
 
                 // if any dependency may have changed, update
                 if neighbors.into_iter().any(|input_id| {
                     let input = &self.cells[input_id];
-                    let cell = &self.cells[cell_id.0];
+                    let cell = &self.cells[cell_id.index()];
                     let dependency_stale = input.last_verified_version != self.version
                         || input.last_updated_version > cell.last_verified_version;
 
@@ -96,7 +76,7 @@ impl<F: Run + Copy + Eq + Hash + Clone> Db<F> {
                 }) {
                     self.run_compute_function(cell_id);
                 } else {
-                    let cell = &mut self.cells[cell_id.0];
+                    let cell = &mut self.cells[cell_id.index()];
                     cell.last_verified_version = self.version;
                 }
             } else {
@@ -111,7 +91,7 @@ impl<F: Run + Copy + Eq + Hash + Clone> Db<F> {
             *cell_id
         } else {
             let new_id = self.cells.add_node(CellValue::new(input.clone()));
-            let cell = Cell(new_id);
+            let cell = Cell::new(new_id);
             self.input_to_cell.insert(input, cell);
             cell
         }
@@ -131,7 +111,7 @@ impl<F: Run + Copy + Eq + Hash + Clone> Db<F> {
             "`{input:?}` is not an input - inputs must have 0 dependencies"
         );
 
-        let cell = &mut self.cells[cell_id.0];
+        let cell = &mut self.cells[cell_id.index()];
         let new_hash = new_value.get_hash();
 
         if let Some((old_hash, _)) = cell.result.as_ref() {
@@ -148,23 +128,23 @@ impl<F: Run + Copy + Eq + Hash + Clone> Db<F> {
     }
 
     fn is_input(&self, cell: Cell) -> bool {
-        self.cells.neighbors(cell.0).count() == 0
+        self.cells.neighbors(cell.index()).count() == 0
     }
 
     #[cfg(test)]
     fn get_cell(&mut self, input: F) -> &CellValue<F> {
         let cell = self.cell(input);
-        &self.cells[cell.0]
+        &self.cells[cell.index()]
     }
 
     /// Similar to `update_input` but runs the compute function
     /// instead of accepting a given value. This also will not update
     /// `self.version`
     fn run_compute_function(&mut self, cell_id: Cell) {
-        let cell = &self.cells[cell_id.0];
+        let cell = &self.cells[cell_id.index()];
         let result = cell.compute.run(&mut self.handle(cell_id));
         let new_hash = result.get_hash();
-        let cell = &mut self.cells[cell_id.0];
+        let cell = &mut self.cells[cell_id.index()];
 
         if let Some((old_hash, _)) = cell.result.as_ref() {
             if new_hash == *old_hash {

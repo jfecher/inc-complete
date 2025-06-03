@@ -22,7 +22,7 @@ impl<'db, F: Run + Copy + Eq + Hash + Clone> DbHandle<'db, F> {
     {
         // Register the dependency
         let dependency = self.db.cell(compute);
-        self.db.cells.update_edge(self.current_operation.0, dependency.0, ());
+        self.db.cells.update_edge(self.current_operation.index(), dependency.index(), ());
 
         // Fetch the current value of the dependency
         self.db.get(compute)
