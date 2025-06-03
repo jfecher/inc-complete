@@ -1,7 +1,7 @@
 use std::any::Any;
 use std::hash::{Hash, Hasher};
 
-use crate::db_handle::DbHandle;
+use crate::DbHandle;
 
 pub trait Run: Sized {
     fn run(self, db: &mut DbHandle<Self>) -> Value;
