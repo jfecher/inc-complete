@@ -4,7 +4,7 @@ use std::hash::{Hash, Hasher};
 use crate::DbHandle;
 
 pub trait Run: Sized {
-    fn run(self, db: &mut DbHandle<Self>) -> Value;
+    fn run(&self, db: &mut DbHandle<Self>) -> Value;
 }
 
 pub struct Value(Box<dyn ValueTrait>);

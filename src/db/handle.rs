@@ -13,7 +13,7 @@ pub struct DbHandle<'db, F> {
     current_operation: Cell,
 }
 
-impl<'db, F: Run + Copy + Eq + Hash + Clone> DbHandle<'db, F> {
+impl<'db, F: Run + Eq + Hash> DbHandle<'db, F> {
     pub(crate) fn new(db: &'db mut Db<F>, current_operation: Cell) -> Self {
         // We're re-running a cell so remove any past dependencies
         let edges = db.cells.edges(current_operation.index())
@@ -35,6 +35,6 @@ impl<'db, F: Run + Copy + Eq + Hash + Clone> DbHandle<'db, F> {
         self.db.cells.update_edge(self.current_operation.index(), dependency.index(), ());
 
         // Fetch the current value of the dependency
-        self.db.get(compute)
+        self.db.get_with_cell(dependency)
     }
 }

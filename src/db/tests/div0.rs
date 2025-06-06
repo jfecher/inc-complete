@@ -1,6 +1,6 @@
 use crate::{db::START_VERSION, Db, DbHandle, Run, Value};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 enum SafeDiv {
     Numerator,
     Denominator,
@@ -10,21 +10,18 @@ enum SafeDiv {
 }
 
 impl Run for SafeDiv {
-    fn run(self, db: &mut DbHandle<Self>) -> Value {
+    fn run(&self, db: &mut DbHandle<Self>) -> Value {
         use SafeDiv::*;
         match self {
             Numerator => Value::new(6),
             Denominator => Value::new(0),
             Division => {
-                eprintln!("division");
                 Value::new(*db.get::<i32>(Numerator) / *db.get::<i32>(Denominator))
             }
             DenominatorIs0 => {
-                eprintln!("denominator is 0?");
                 Value::new(*db.get::<i32>(Denominator) == 0)
             }
             Result => {
-                eprintln!("result");
                 if *db.get(DenominatorIs0) {
                     Value::new(0i32)
                 } else {
@@ -97,7 +94,7 @@ fn dynamic_dependency_removed() {
     assert_eq!(*db.get::<i32>(SafeDiv::Result), 0);
 
     let divide0_version = db.version;
-    let result_cell = db.get_cell_value(SafeDiv::Result);
+    let result_cell = db.get_cell_value(&SafeDiv::Result);
     let result_last_verified = result_cell.last_verified_version;
     let result_last_updated = result_cell.last_updated_version;
 
@@ -114,10 +111,10 @@ fn dynamic_dependency_removed() {
 
     // DenominatorIs0 was just verified, ensure that Result does not need to be recomputed.
     // If Division were still a dependency, we'd expect Result to be stale.
-    assert!(!db.is_stale(SafeDiv::Result));
+    assert!(!db.is_stale(&SafeDiv::Result));
 
     // Division shouldn't have been updated or verified in a while
-    let division_cell = db.get_cell_value(SafeDiv::Division);
+    let division_cell = db.get_cell_value(&SafeDiv::Division);
     let division_last_verified = division_cell.last_verified_version;
     let division_last_updated = division_cell.last_updated_version;
     assert_eq!(division_last_verified, divide_changed_version);

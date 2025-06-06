@@ -1,4 +1,4 @@
-use std::{collections::HashMap, hash::Hash};
+use std::{collections::HashMap, hash::Hash, rc::Rc};
 use crate::{value::HashEqObj, Cell, Run, Value};
 use petgraph::graph::DiGraph;
 use crate::cell::CellValue;
@@ -13,11 +13,10 @@ const START_VERSION: u32 = 1;
 pub struct Db<F> {
     cells: DiGraph<CellValue<F>, ()>,
     version: u32,
-
-    input_to_cell: HashMap<F, Cell>,
+    input_to_cell: HashMap<Rc<F>, Cell>,
 }
 
-impl<F> Db<F> {
+impl<F: Eq + Hash> Db<F> {
     pub fn new() -> Self {
         Self {
             cells: DiGraph::default(),
@@ -27,7 +26,7 @@ impl<F> Db<F> {
     }
 }
 
-impl<F: Run + Copy + Eq + Hash + Clone> Db<F> {
+impl<F: Run + Eq + Hash> Db<F> {
     /// Retrieves the up to date value for the given computation, re-running any dependencies as
     /// necessary.
     ///
@@ -37,6 +36,14 @@ impl<F: Run + Copy + Eq + Hash + Clone> Db<F> {
         F: std::fmt::Debug,
     {
         let cell_id = self.get_or_insert_cell(compute);
+        self.get_with_cell(cell_id)
+    }
+
+    /// Retrieves the up to date value for the given cell, re-running any dependencies as
+    /// necessary.
+    ///
+    /// This function can panic if the dynamic type of the value returned by `compute.run(..)` is not `T`.
+    pub fn get_with_cell<'a, T: 'static>(&'a mut self, cell_id: Cell) -> &'a T {
         self.update_cell(cell_id);
 
         let cell = &self.cells[cell_id.index()];
@@ -48,10 +55,7 @@ impl<F: Run + Copy + Eq + Hash + Clone> Db<F> {
 
     /// Trigger an update of the given cell, recursively checking and re-running any out of date
     /// dependencies.
-    fn update_cell(&mut self, cell_id: Cell)
-    where
-        F: std::fmt::Debug,
-    {
+    fn update_cell(&mut self, cell_id: Cell) {
         let cell = &self.cells[cell_id.index()];
 
         if cell.last_verified_version != self.version {
@@ -74,7 +78,7 @@ impl<F: Run + Copy + Eq + Hash + Clone> Db<F> {
     /// Inputs which have never been computed are also considered stale.
     ///
     /// This does not actually re-compute the input.
-    pub fn is_stale(&self, input: F) -> bool {
+    pub fn is_stale(&self, input: &F) -> bool {
         // If the cell doesn't exist, it is definitely stale
         let Some(cell) = self.get_cell(input) else {
             return true;
@@ -97,14 +101,18 @@ impl<F: Run + Copy + Eq + Hash + Clone> Db<F> {
         })
     }
 
-    pub fn get_cell(&self, input: F) -> Option<Cell> {
-        self.input_to_cell.get(&input).copied()
+    /// Return the corresponding Cell for a given input, if it exists.
+    ///
+    /// This will not update any values.
+    pub fn get_cell(&self, input: &F) -> Option<Cell> {
+        self.input_to_cell.get(input).copied()
     }
 
     pub fn get_or_insert_cell(&mut self, input: F) -> Cell {
         if let Some(cell_id) = self.input_to_cell.get(&input) {
             *cell_id
         } else {
+            let input = Rc::new(input);
             let new_id = self.cells.add_node(CellValue::new(input.clone()));
             let cell = Cell::new(new_id);
             self.input_to_cell.insert(input, cell);
@@ -123,7 +131,8 @@ impl<F: Run + Copy + Eq + Hash + Clone> Db<F> {
         let cell_id = self.get_or_insert_cell(input);
         debug_assert!(
             self.is_input(cell_id),
-            "`{input:?}` is not an input - inputs must have 0 dependencies"
+            "`{:?}` is not an input - inputs must have 0 dependencies",
+            self.cells[cell_id.index()].input,
         );
 
         let cell = &mut self.cells[cell_id.index()];
@@ -147,7 +156,7 @@ impl<F: Run + Copy + Eq + Hash + Clone> Db<F> {
     }
 
     #[cfg(test)]
-    pub(crate) fn get_cell_value(&self, input: F) -> &CellValue<F> where F: std::fmt::Debug {
+    pub(crate) fn get_cell_value(&self, input: &F) -> &CellValue<F> where F: std::fmt::Debug {
         let cell = self.get_cell(input).unwrap_or_else(|| {
             panic!("get_cell_value: Expected cell for `{input:?}` to exist")
         });
@@ -159,7 +168,8 @@ impl<F: Run + Copy + Eq + Hash + Clone> Db<F> {
     /// `self.version`
     fn run_compute_function(&mut self, cell_id: Cell) {
         let cell = &self.cells[cell_id.index()];
-        let result = cell.compute.run(&mut self.handle(cell_id));
+        let input = cell.input.clone();
+        let result = input.run(&mut self.handle(cell_id));
         let new_hash = result.get_hash();
         let cell = &mut self.cells[cell_id.index()];
 
