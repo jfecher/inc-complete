@@ -26,7 +26,7 @@ impl<F: Eq + Hash> Db<F> {
     }
 }
 
-impl<F: Run + Eq + Hash> Db<F> {
+impl<F: Run + Eq + Hash + std::fmt::Debug> Db<F> {
     /// Retrieves the up to date value for the given computation, re-running any dependencies as
     /// necessary.
     ///
@@ -49,8 +49,10 @@ impl<F: Run + Eq + Hash> Db<F> {
         let cell = &self.cells[cell_id.index()];
         let result = cell.result().expect("cell result should have been computed already");
 
-        result.downcast_obj_ref()
-            .expect("Output type to `Db::get` does not match the type of the value returned by the `Run::run` function")
+        result.downcast_obj_ref().unwrap_or_else(|| {
+            panic!("Output type to `Db::get({:?})` does not match the type of the value returned by the `Run::run` function",
+                cell.input)
+        })
     }
 
     /// Trigger an update of the given cell, recursively checking and re-running any out of date
@@ -81,6 +83,7 @@ impl<F: Run + Eq + Hash> Db<F> {
     pub fn is_stale(&self, input: &F) -> bool {
         // If the cell doesn't exist, it is definitely stale
         let Some(cell) = self.get_cell(input) else {
+            eprintln!("No cell {input:?}");
             return true;
         };
         self.is_stale_cell(cell)
@@ -89,6 +92,7 @@ impl<F: Run + Eq + Hash> Db<F> {
     /// True if a given cell is stale and needs to be re-computed.
     /// This does not actually re-compute the input.
     pub fn is_stale_cell(&self, cell: Cell) -> bool {
+        eprintln!("is_stale_cell: getting neighbors:");
         let neighbors = self.cells.neighbors(cell.index()).collect::<Vec<_>>();
 
         // if any dependency may have changed, this cell is stale
@@ -96,8 +100,11 @@ impl<F: Run + Eq + Hash> Db<F> {
             let dependency = &self.cells[dependency_id];
             let cell = &self.cells[cell.index()];
 
-            dependency.last_verified_version != self.version
-                || dependency.last_updated_version > cell.last_verified_version
+            let s = dependency.last_verified_version != self.version
+                || dependency.last_updated_version > cell.last_verified_version;
+
+            eprintln!("  neighbor {:?} is_stale: {s}", dependency.input);
+            s
         })
     }
 
@@ -112,6 +119,8 @@ impl<F: Run + Eq + Hash> Db<F> {
         if let Some(cell_id) = self.input_to_cell.get(&input) {
             *cell_id
         } else {
+        eprintln!("insert cell {input:?}");
+
             let input = Rc::new(input);
             let new_id = self.cells.add_node(CellValue::new(input.clone()));
             let cell = Cell::new(new_id);
