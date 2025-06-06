@@ -83,7 +83,6 @@ impl<F: Run + Eq + Hash + std::fmt::Debug> Db<F> {
     pub fn is_stale(&self, input: &F) -> bool {
         // If the cell doesn't exist, it is definitely stale
         let Some(cell) = self.get_cell(input) else {
-            eprintln!("No cell {input:?}");
             return true;
         };
         self.is_stale_cell(cell)
@@ -92,7 +91,6 @@ impl<F: Run + Eq + Hash + std::fmt::Debug> Db<F> {
     /// True if a given cell is stale and needs to be re-computed.
     /// This does not actually re-compute the input.
     pub fn is_stale_cell(&self, cell: Cell) -> bool {
-        eprintln!("is_stale_cell: getting neighbors:");
         let neighbors = self.cells.neighbors(cell.index()).collect::<Vec<_>>();
 
         // if any dependency may have changed, this cell is stale
@@ -100,11 +98,8 @@ impl<F: Run + Eq + Hash + std::fmt::Debug> Db<F> {
             let dependency = &self.cells[dependency_id];
             let cell = &self.cells[cell.index()];
 
-            let s = dependency.last_verified_version != self.version
-                || dependency.last_updated_version > cell.last_verified_version;
-
-            eprintln!("  neighbor {:?} is_stale: {s}", dependency.input);
-            s
+            dependency.last_verified_version != self.version
+                || dependency.last_updated_version > cell.last_verified_version
         })
     }
 
@@ -119,8 +114,6 @@ impl<F: Run + Eq + Hash + std::fmt::Debug> Db<F> {
         if let Some(cell_id) = self.input_to_cell.get(&input) {
             *cell_id
         } else {
-        eprintln!("insert cell {input:?}");
-
             let input = Rc::new(input);
             let new_id = self.cells.add_node(CellValue::new(input.clone()));
             let cell = Cell::new(new_id);

@@ -303,8 +303,6 @@ fn cached() {
     let ast = get_parsed(&mut db).unwrap();
     assert_eq!(ast, Ast::Int(42));
 
-    eprintln!("Checking if check is stale:");
-
     // Although the input has changed, we cache each intermediate result and shouldn't
     // need to re-run execute (but execute_all will re-run to produce an Ast that we
     // can check is cached).
