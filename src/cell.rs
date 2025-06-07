@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use crate::Value;
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Cell(petgraph::graph::NodeIndex);
 
 impl Cell {

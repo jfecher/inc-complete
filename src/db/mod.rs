@@ -1,5 +1,5 @@
 use std::{collections::HashMap, hash::Hash, rc::Rc};
-use crate::{value::HashEqObj, Cell, Run, Value};
+use crate::{value::HashEqObj, Cell, Computation, Run, Value};
 use petgraph::graph::DiGraph;
 use crate::cell::CellValue;
 
@@ -10,18 +10,18 @@ pub use handle::DbHandle;
 
 const START_VERSION: u32 = 1;
 
-pub struct Db<F> {
-    cells: DiGraph<CellValue<F>, ()>,
+pub struct Db<Storage: Computation> {
+    cells: DiGraph<CellValue<Storage>, ()>,
     version: u32,
-    input_to_cell: HashMap<Rc<F>, Cell>,
+    storage: Storage::InputToCell,
 }
 
-impl<F: Eq + Hash> Db<F> {
+impl<C: Computation> Db<C> {
     pub fn new() -> Self {
         Self {
             cells: DiGraph::default(),
-            input_to_cell: HashMap::default(),
             version: START_VERSION,
+            storage: C::default(),
         }
     }
 }
