@@ -1,25 +1,48 @@
 use crate::db::START_VERSION;
+use crate::Cached;
+use crate::Computation;
 use crate::DbHandle;
-use crate::{Db, Run, Value};
+use crate::Db;
+use crate::Input;
+use crate::OutputTypeForInput;
+use crate::Run;
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-enum Basic {
-    A1,
-    A2,
-    A3,
-}
-
+// Emulate this spreadsheet:
 //      A
 // 1 [ =20 ]
 // 2 [ =A1 + 1 ]
 // 3 [ =A2 + 2 ]
-impl Run for Basic {
-    fn run(&self, db: &mut DbHandle<Self>) -> Value {
-        match self {
-            Basic::A1 => Value::new(20i32),
-            Basic::A2 => Value::new(db.get::<i32>(Basic::A1) + 1i32),
-            Basic::A3 => Value::new(db.get::<i32>(Basic::A2) + 2i32),
-        }
+#[derive(Clone)]
+struct A1;
+const A1_C: Input<A1> = Input::new();
+
+#[derive(Clone, PartialEq, Eq, Hash)]
+struct A2;
+const A2_C: Cached<A2> = Cached::new(A2);
+
+#[derive(Clone, PartialEq, Eq, Hash)]
+struct A3;
+const A3_C: Cached<A3> = Cached::new(A3);
+
+type Spreadsheet = (Input<A1>, Cached<A2>, Cached<A3>);
+
+impl OutputTypeForInput for A1 {
+    type Output = i32;
+}
+
+impl Run for A2 {
+    type Output = i32;
+
+    fn run(&self, handle: &mut DbHandle<impl Computation>) -> Self::Output {
+        handle.get(A1_C) + 1
+    }
+}
+
+impl Run for A3 {
+    type Output = i32;
+
+    fn run(&self, handle: &mut DbHandle<impl Computation>) -> Self::Output {
+        handle.get(A2_C) + 2
     }
 }
 
@@ -30,8 +53,8 @@ impl Run for Basic {
 // 3 [ =A2 + 2 ]
 #[test]
 fn basic() {
-    let mut db = Db::new();
-    let result = *db.get::<i32>(Basic::A3);
+    let mut db = Db::<Spreadsheet>::new();
+    let result = *db.get(A3_C);
     assert_eq!(result, 23);
 }
 
@@ -52,7 +75,7 @@ fn no_recompute_basic() {
     let expected_version = START_VERSION;
     assert_eq!(db.version, expected_version);
 
-    let a1 = db.get_cell_value(&Basic::A1);
+    let a1 = db.unwrap_cell_value(&Basic::A1);
     assert_eq!(a1.last_updated_version, expected_version);
     assert_eq!(a1.last_verified_version, expected_version);
 

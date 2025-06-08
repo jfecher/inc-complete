@@ -1,20 +1,19 @@
 use petgraph::visit::EdgeRef;
 
-use crate::{Cell, Db, Run};
-use std::hash::Hash;
+use crate::{Cell, Computation, Db};
 
 /// A handle to the database during some operation.
 ///
 /// This wraps calls to the Db so that any `get` calls
 /// will be automatically registered as dependencies of
 /// the current operation.
-pub struct DbHandle<'db, F> {
-    db: &'db mut Db<F>,
+pub struct DbHandle<'db, C: Computation> {
+    db: &'db mut Db<C>,
     current_operation: Cell,
 }
 
-impl<'db, F: Run + Eq + Hash> DbHandle<'db, F> {
-    pub(crate) fn new(db: &'db mut Db<F>, current_operation: Cell) -> Self {
+impl<'db, C: Computation> DbHandle<'db, C> {
+    pub(crate) fn new(db: &'db mut Db<C>, current_operation: Cell) -> Self {
         // We're re-running a cell so remove any past dependencies
         let edges = db.cells.edges(current_operation.index())
             .map(|edge| edge.id())
@@ -26,9 +25,8 @@ impl<'db, F: Run + Eq + Hash> DbHandle<'db, F> {
         Self { db, current_operation }
     }
 
-    pub fn get<T: 'static>(&mut self, compute: F) -> &T
-        where 
-            F: std::fmt::Debug
+    pub fn get<ConcreteC: Computation>(&mut self, compute: ConcreteC) -> &ConcreteC::Output
+        where C::Output: Eq, C: Clone
     {
         // Register the dependency
         let dependency = self.db.get_or_insert_cell(compute);
