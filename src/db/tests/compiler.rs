@@ -1,4 +1,7 @@
-use std::{collections::{BTreeMap, BTreeSet}, rc::Rc};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    rc::Rc,
+};
 
 use crate::{Cached, Computation, Db, DbHandle, OutputTypeForInput, Run};
 
@@ -104,10 +107,16 @@ enum Error {
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
 enum Ast {
-    Var { name: String },
+    Var {
+        name: String,
+    },
     Int(i64),
     Add(Rc<Ast>, Rc<Ast>),
-    Let { name: String, rhs: Rc<Ast>, body: Rc<Ast> },
+    Let {
+        name: String,
+        rhs: Rc<Ast>,
+        body: Rc<Ast>,
+    },
 }
 
 type CheckEnv = BTreeSet<String>;
@@ -181,7 +190,7 @@ fn parse_value(mut text: &str) -> Result<(Ast, &str), Error> {
 
             text = text.trim();
             if text.chars().next() != Some(')') {
-                return Err(Error::UnterminatedLParen(ast))
+                return Err(Error::UnterminatedLParen(ast));
             } else {
                 text = &text[1..];
                 ast
@@ -190,14 +199,18 @@ fn parse_value(mut text: &str) -> Result<(Ast, &str), Error> {
         s if s.is_ascii_alphabetic() => {
             let (word, rest) = parse_word(text);
             text = rest;
-            Ast::Var { name: word.to_string() }
-        },
+            Ast::Var {
+                name: word.to_string(),
+            }
+        }
         s if s.is_numeric() => {
             let (word, rest) = parse_word(text);
             text = rest;
-            let int = word.parse::<i64>().map_err(|_| Error::InvalidIntegerLiteral(word.to_string()))?;
+            let int = word
+                .parse::<i64>()
+                .map_err(|_| Error::InvalidIntegerLiteral(word.to_string()))?;
             Ast::Int(int)
-        },
+        }
         _ => return Err(Error::InputEmptyOrUnparsedOutput(text.to_string())),
     };
 
@@ -234,41 +247,45 @@ fn check(ast: &Ast, env: &Rc<CheckEnv>, db: &mut DbHandle<impl Computation>) -> 
             } else {
                 Err(Error::NameNotDefined(name.clone()))
             }
-        },
+        }
         Ast::Int(_) => Ok(()),
         Ast::Add(lhs, rhs) => {
             db.get(Check::new(lhs.clone(), env.clone())).clone()?;
             db.get(Check::new(rhs.clone(), env.clone())).clone()
-        },
+        }
         Ast::Let { name, rhs, body } => {
             db.get(Check::new(rhs.clone(), env.clone())).clone()?;
 
             let mut new_env = env.as_ref().clone();
             new_env.insert(name.clone());
             db.get(Check::new(body.clone(), Rc::new(new_env))).clone()
-        },
+        }
     }
 }
 
-fn execute(ast: &Rc<Ast>, env: &Rc<ExecEnv>, db: &mut DbHandle<impl Computation>) -> Result<i64, Error> {
+fn execute(
+    ast: &Rc<Ast>,
+    env: &Rc<ExecEnv>,
+    db: &mut DbHandle<impl Computation>,
+) -> Result<i64, Error> {
     match ast.as_ref() {
         Ast::Var { name } => {
             // Assume `check` has already been run and thus that all names are defined
             Ok(env[name])
-        },
+        }
         Ast::Int(x) => Ok(*x),
         Ast::Add(lhs, rhs) => {
             let lhs = db.get(Execute::new(lhs.clone(), env.clone())).clone()?;
             let rhs = db.get(Execute::new(rhs.clone(), env.clone())).clone()?;
             Ok(lhs + rhs)
-        },
+        }
         Ast::Let { name, rhs, body } => {
             let rhs = db.get(Execute::new(rhs.clone(), env.clone())).clone()?;
 
             let mut new_env = env.as_ref().clone();
             new_env.insert(name.clone(), rhs);
             db.get(Execute::new(body.clone(), Rc::new(new_env))).clone()
-        },
+        }
     }
 }
 
@@ -282,8 +299,10 @@ fn execute_all(db: &mut DbHandle<impl Computation>) -> Result<i64, Error> {
     let ast = db.get(PARSE).clone()?;
     let ast = Rc::new(ast);
 
-    db.get(Check::new(ast.clone(), Rc::new(CheckEnv::new()))).clone()?;
-    db.get(Execute::new(ast.clone(), Rc::new(ExecEnv::new()))).clone()
+    db.get(Check::new(ast.clone(), Rc::new(CheckEnv::new())))
+        .clone()?;
+    db.get(Execute::new(ast.clone(), Rc::new(ExecEnv::new())))
+        .clone()
 }
 
 fn set_input(db: &mut Db<Compiler>, source_program: &str) {
@@ -308,7 +327,10 @@ fn basic_programs() {
 
     set_input(&mut db, "(let foo 42 (+ 58 foo)) foo");
     let result = db.get(EXECUTE_ALL).clone();
-    assert_eq!(result, Err(Error::InputEmptyOrUnparsedOutput(" foo".to_string())));
+    assert_eq!(
+        result,
+        Err(Error::InputEmptyOrUnparsedOutput(" foo".to_string()))
+    );
 
     set_input(&mut db, "(let foo 42 (+ foo bar))");
     let result = db.get(EXECUTE_ALL).clone();

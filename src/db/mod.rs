@@ -1,6 +1,6 @@
+use crate::cell::CellData;
 use crate::{Cell, Computation};
 use petgraph::graph::DiGraph;
-use crate::cell::CellData;
 
 mod handle;
 mod tests;
@@ -15,7 +15,8 @@ pub struct Db<C: Computation> {
     storage: C::Storage,
 }
 
-impl<C: Computation> Db<C> where 
+impl<C: Computation> Db<C>
+where
     C::Storage: Default,
 {
     pub fn new() -> Self {
@@ -35,9 +36,12 @@ impl<C: Computation> Db<C> {
     pub fn is_stale<Concrete: Computation>(&self, input: &Concrete) -> bool {
         // If the cell doesn't exist, it is definitely stale
         let Some(cell) = self.get_cell(input) else {
+            println!("{} is stale", std::any::type_name::<Concrete>());
             return true;
         };
-        self.is_stale_cell(cell)
+        let r = self.is_stale_cell(cell);
+        println!("{} is stale: {r}", std::any::type_name::<Concrete>());
+        r
     }
 
     /// True if a given cell is stale and needs to be re-computed.
@@ -45,6 +49,7 @@ impl<C: Computation> Db<C> {
     pub fn is_stale_cell(&self, cell: Cell) -> bool {
         let computation_id = self.cells[cell.index()].computation_id;
         if C::output_is_unset::<C>(cell, computation_id, computation_id, self) {
+            println!("output {} is unset", computation_id);
             return true;
         }
 
@@ -67,8 +72,9 @@ impl<C: Computation> Db<C> {
         C::dispatch_input_to_cell(input, &self.storage)
     }
 
-    pub fn get_or_insert_cell<ConcreteC>(&mut self, input: ConcreteC) -> Cell 
-        where ConcreteC: Computation
+    pub fn get_or_insert_cell<ConcreteC>(&mut self, input: ConcreteC) -> Cell
+    where
+        ConcreteC: Computation,
     {
         if let Some(cell) = C::dispatch_input_to_cell(&input, &self.storage) {
             cell
@@ -86,8 +92,11 @@ impl<C: Computation> Db<C> {
     ///
     /// May panic in Debug mode if the input is not an input - ie. it has at least 1 dependency.
     /// Note that this step is skipped when compiling in Release mode.
-    pub fn update_input<ConcreteC: Computation>(&mut self, input: ConcreteC, new_value: ConcreteC::Output)
-    where
+    pub fn update_input<ConcreteC: Computation>(
+        &mut self,
+        input: ConcreteC,
+        new_value: ConcreteC::Output,
+    ) where
         ConcreteC: std::fmt::Debug,
         C::Output: Eq,
     {
@@ -102,7 +111,13 @@ impl<C: Computation> Db<C> {
         let cell = &self.cells[cell_id.index()];
         let computation_id = cell.computation_id;
 
-        let changed = C::dispatch_update_output::<ConcreteC, C>(cell_id, computation_id, computation_id, new_value, self);
+        let changed = C::dispatch_update_output::<ConcreteC, C>(
+            cell_id,
+            computation_id,
+            computation_id,
+            new_value,
+            self,
+        );
         let cell = &mut self.cells[cell_id.index()];
 
         if changed {
@@ -131,20 +146,27 @@ impl<C: Computation> Db<C> {
     }
 
     #[cfg(test)]
-    pub(crate) fn unwrap_cell_value<Concrete: Computation>(&self, input: &Concrete) -> &CellData where Concrete: std::fmt::Debug {
-        let cell = self.get_cell(input).unwrap_or_else(|| {
-            panic!("unwrap_cell_value: Expected cell for `{input:?}` to exist")
-        });
+    pub(crate) fn unwrap_cell_value<Concrete: Computation>(&self, input: &Concrete) -> &CellData
+    where
+        Concrete: std::fmt::Debug,
+    {
+        let cell = self
+            .get_cell(input)
+            .unwrap_or_else(|| panic!("unwrap_cell_value: Expected cell for `{input:?}` to exist"));
         &self.cells[cell.index()]
     }
 }
 
-impl<C: Computation + Clone> Db<C> where C::Output: Eq {
+impl<C: Computation + Clone> Db<C>
+where
+    C::Output: Eq,
+{
     /// Similar to `update_input` but runs the compute function
     /// instead of accepting a given value. This also will not update
     /// `self.version`
     fn run_compute_function(&mut self, cell_id: Cell)
-        where C::Output: Eq
+    where
+        C::Output: Eq,
     {
         let cell = &self.cells[cell_id.index()];
         let computation_id = cell.computation_id;
@@ -193,7 +215,8 @@ impl<C: Computation + Clone> Db<C> where C::Output: Eq {
 
         let computation_id = self.cells[cell_id.index()].computation_id;
         let container = C::get_storage_mut::<Concrete>(computation_id, self.storage_mut());
-        Concrete::get_function_and_output(cell_id, container).1
+        Concrete::get_function_and_output(cell_id, container)
+            .1
             .expect("cell result should have been computed already")
     }
 }

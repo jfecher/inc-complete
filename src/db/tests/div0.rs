@@ -1,4 +1,4 @@
-use crate::{db::START_VERSION, Cached, Db, DbHandle, Input, OutputTypeForInput, Run};
+use crate::{Cached, Db, DbHandle, Input, OutputTypeForInput, Run, db::START_VERSION};
 
 type SafeDiv = (
     Input<Numerator>,
@@ -68,14 +68,17 @@ type SafeDivDb = Db<SafeDiv>;
 
 #[test]
 fn from_scratch() {
-    // Run from scratch with Denominator = 0
-    assert_eq!(0i32, *SafeDivDb::new().get(RESULT));
+    // Run from scratch
+    let mut db = SafeDivDb::new();
+    db.update_input(NUMERATOR, 6);
+    db.update_input(DENOMINATOR, 0);
+    assert_eq!(0i32, *db.get(RESULT));
 }
 
 #[test]
 fn dynamic_dependency_not_run() {
     // Given:
-    //  Numerator = 4
+    //  Numerator = 6
     //  Denominator = 2
     //  Division = Numerator / Denominator
     //  DenominatorIs0 = Denominator == 0
@@ -88,15 +91,16 @@ fn dynamic_dependency_not_run() {
     //
     // Start with Denominator = 2, then recompute with Denominator = 0
     let mut db = SafeDivDb::new();
-    assert_eq!(db.version, START_VERSION);
+    db.update_input(NUMERATOR, 6);
     db.update_input(DENOMINATOR, 2);
-    assert_eq!(db.version, START_VERSION + 1);
+
+    assert_eq!(db.version, START_VERSION + 2);
 
     // 6 / 2
     assert_eq!(3i32, *db.get(RESULT));
 
     db.update_input(DENOMINATOR, 0);
-    assert_eq!(db.version, START_VERSION + 2);
+    assert_eq!(db.version, START_VERSION + 3);
 
     // Although Division was previously a dependency of Result,
     // we shouldn't update Division due to the `DenominatorIs0` changing as well,
@@ -117,6 +121,7 @@ fn dynamic_dependency_not_run() {
 #[test]
 fn dynamic_dependency_removed() {
     let mut db = SafeDivDb::new();
+    db.update_input(NUMERATOR, 6);
     db.update_input(DENOMINATOR, 2);
 
     // Compute with non-zero denominator so that Division is registered as a dependency

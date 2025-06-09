@@ -1,11 +1,11 @@
-use crate::db::START_VERSION;
 use crate::Cached;
 use crate::Computation;
-use crate::DbHandle;
 use crate::Db;
+use crate::DbHandle;
 use crate::Input;
 use crate::OutputTypeForInput;
 use crate::Run;
+use crate::db::START_VERSION;
 
 // Emulate this spreadsheet:
 //      A
@@ -56,6 +56,7 @@ impl Run for A3 {
 #[test]
 fn basic() {
     let mut db = Db::<Spreadsheet>::new();
+    db.update_input(A1_C, 20);
     let result = *db.get(A3_C);
     assert_eq!(result, 23);
 }
@@ -68,13 +69,14 @@ fn basic() {
 #[test]
 fn no_recompute_basic() {
     let mut db = Db::<Spreadsheet>::new();
+    db.update_input(A1_C, 20);
     let result1 = *db.get(A3_C);
     let result2 = *db.get(A3_C);
     assert_eq!(result1, 23);
     assert_eq!(result2, 23);
 
-    // No input has been updated
-    let expected_version = START_VERSION;
+    // Only 1 input has been updated
+    let expected_version = START_VERSION + 1;
     assert_eq!(db.version, expected_version);
 
     let a1 = db.unwrap_cell_value(&A1_C);
