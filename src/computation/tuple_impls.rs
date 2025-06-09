@@ -243,8 +243,10 @@ impl<A, B, C> Computation for (A, B, C) where
     fn computation_id_of<T: Computation>() -> u32 {
         if TypeId::of::<T>() == TypeId::of::<A>() {
             0
+        } else if TypeId::of::<T>() == TypeId::of::<B>() {
+            1
         } else {
-            1 + B::computation_id_of::<T>()
+            2 + C::computation_id_of::<T>()
         }
     }
 
@@ -306,10 +308,134 @@ impl<A, B, C> Computation for (A, B, C) where
         let concrete_id = TypeId::of::<Concrete>();
         if concrete_id == TypeId::of::<A>() {
             A::dispatch_insert_new_cell::<Concrete>(cell, input, &mut storage.0)
-        } else if concrete_id == TypeId::of::<A>() {
+        } else if concrete_id == TypeId::of::<B>() {
             B::dispatch_insert_new_cell::<Concrete>(cell, input, &mut storage.1)
         } else {
             C::dispatch_insert_new_cell::<Concrete>(cell, input, &mut storage.2)
+        }
+    }
+}
+
+impl<A, B, C, D, E> Computation for (A, B, C, D, E) where
+    A: Computation,
+    B: Computation,
+    C: Computation,
+    D: Computation,
+    E: Computation,
+{
+    type Storage = (
+        A::Storage,
+        B::Storage,
+        C::Storage,
+        D::Storage,
+        E::Storage,
+    );
+    type Output = ();
+
+    fn run(&self, _: &mut DbHandle<impl Computation>) -> Self::Output {
+        panic!("Type dispatch failed in `run`")
+    }
+
+    fn input_to_cell(_: &Self, _: &Self::Storage) -> Option<Cell> {
+        panic!("Type dispatch failed in `input_to_cell`")
+    }
+
+    fn insert_new_cell(_: Cell, _: Self, _: &mut Self::Storage) {
+        panic!("Type dispatch failed in `insert_new_cell`")
+    }
+
+    fn get_function_and_output(_: Cell, _: &Self::Storage) -> (&Self, Option<&Self::Output>) {
+        panic!("Type dispatch failed in `get_function_and_output`")
+    }
+
+    fn set_output(_: Cell, _: Self::Output, _: &mut Self::Storage) {
+        panic!("Type dispatch failed in `set_output`")
+    }
+
+    fn computation_id_of<T: Computation>() -> u32 {
+        if TypeId::of::<T>() == TypeId::of::<A>() {
+            0
+        } else if TypeId::of::<T>() == TypeId::of::<B>() {
+            1
+        } else if TypeId::of::<T>() == TypeId::of::<C>() {
+            2
+        } else {
+            3 + D::computation_id_of::<T>()
+        }
+    }
+
+    fn get_storage_mut<Concrete: Computation + 'static>(computation_id: u32, container: &mut Self::Storage) -> &mut Concrete::Storage {
+        if computation_id == 0 {
+            A::get_storage_mut::<Concrete>(computation_id, &mut container.0)
+        } else if computation_id == 1 {
+            B::get_storage_mut::<Concrete>(computation_id - 1, &mut container.1)
+        } else if computation_id == 2 {
+            C::get_storage_mut::<Concrete>(computation_id - 2, &mut container.2)
+        } else {
+            D::get_storage_mut::<Concrete>(computation_id - 3, &mut container.3)
+        }
+    }
+
+    fn dispatch_run<FullComputation>(cell: Cell, computation_id: u32, db: &mut Db<FullComputation>) -> bool
+        where FullComputation: Computation,
+              Self: Clone,
+              Self::Output: Eq,
+    {
+        if computation_id == 0 {
+            A::dispatch_run(cell, computation_id, db)
+        } else if computation_id == 1 {
+            B::dispatch_run(cell, computation_id - 1, db)
+        } else if computation_id == 2 {
+            C::dispatch_run(cell, computation_id - 2, db)
+        } else {
+            D::dispatch_run(cell, computation_id - 3, db)
+        }
+    }
+
+    fn dispatch_update_output<Concrete, FullComputation>(cell: Cell, computation_id: u32, output: Concrete::Output, db: &mut Db<FullComputation>) -> bool
+        where Concrete: Computation,
+              FullComputation: Computation,
+              Self::Output: Eq,
+    {
+        if computation_id == 0 {
+            A::dispatch_update_output::<Concrete, FullComputation>(cell, computation_id, output, db)
+        } else if computation_id == 1 {
+            B::dispatch_update_output::<Concrete, FullComputation>(cell, computation_id - 1, output, db)
+        } else if computation_id == 2 {
+            C::dispatch_update_output::<Concrete, FullComputation>(cell, computation_id - 2, output, db)
+        } else {
+            D::dispatch_update_output::<Concrete, FullComputation>(cell, computation_id - 3, output, db)
+        }
+    }
+
+    fn dispatch_input_to_cell<Concrete>(input: &Concrete, container: &Self::Storage) -> Option<Cell>
+        where Concrete: 'static + Computation + Any 
+    {
+        let concrete_id = TypeId::of::<Concrete>();
+        if concrete_id == TypeId::of::<A>() {
+            A::dispatch_input_to_cell::<Concrete>(input, &container.0)
+        } else if concrete_id == TypeId::of::<B>() {
+            B::dispatch_input_to_cell::<Concrete>(input, &container.1)
+        } else if concrete_id == TypeId::of::<C>() {
+            C::dispatch_input_to_cell::<Concrete>(input, &container.2)
+        } else {
+            D::dispatch_input_to_cell::<Concrete>(input, &container.3)
+        }
+    }
+
+    fn dispatch_insert_new_cell<Concrete>(cell: Cell, input: Concrete, storage: &mut Self::Storage)
+        where Concrete: 'static + Computation + Any,
+              Concrete::Storage: 'static,
+    {
+        let concrete_id = TypeId::of::<Concrete>();
+        if concrete_id == TypeId::of::<A>() {
+            A::dispatch_insert_new_cell::<Concrete>(cell, input, &mut storage.0)
+        } else if concrete_id == TypeId::of::<B>() {
+            B::dispatch_insert_new_cell::<Concrete>(cell, input, &mut storage.1)
+        } else if concrete_id == TypeId::of::<C>() {
+            C::dispatch_insert_new_cell::<Concrete>(cell, input, &mut storage.2)
+        } else {
+            D::dispatch_insert_new_cell::<Concrete>(cell, input, &mut storage.3)
         }
     }
 }

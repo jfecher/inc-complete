@@ -1,41 +1,75 @@
-use crate::{db::START_VERSION, Db, DbHandle, Run, Value};
+use crate::{db::START_VERSION, Cached, Db, DbHandle, Input, OutputTypeForInput, Run};
 
-#[derive(Debug, PartialEq, Eq, Hash)]
-enum SafeDiv {
-    Numerator,
-    Denominator,
-    Division,
-    DenominatorIs0,
-    Result,
+type SafeDiv = (
+    Input<Numerator>,
+    Input<Denominator>,
+    Cached<Division>,
+    Cached<DenominatorIs0>,
+    Cached<Result>,
+);
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct Numerator;
+const NUMERATOR: Input<Numerator> = Input::new();
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct Denominator;
+const DENOMINATOR: Input<Denominator> = Input::new();
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct Division;
+const DIVISION: Cached<Division> = Cached::new(Division);
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct DenominatorIs0;
+const DENOMINATOR_IS_0: Cached<DenominatorIs0> = Cached::new(DenominatorIs0);
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct Result;
+const RESULT: Cached<Result> = Cached::new(Result);
+
+impl OutputTypeForInput for Numerator {
+    type Output = i32;
 }
 
-impl Run for SafeDiv {
-    fn run(&self, db: &mut DbHandle<Self>) -> Value {
-        use SafeDiv::*;
-        match self {
-            Numerator => Value::new(6),
-            Denominator => Value::new(0),
-            Division => {
-                Value::new(*db.get::<i32>(Numerator) / *db.get::<i32>(Denominator))
-            }
-            DenominatorIs0 => {
-                Value::new(*db.get::<i32>(Denominator) == 0)
-            }
-            Result => {
-                if *db.get(DenominatorIs0) {
-                    Value::new(0i32)
-                } else {
-                    Value::new(*db.get::<i32>(Division))
-                }
-            }
+impl OutputTypeForInput for Denominator {
+    type Output = i32;
+}
+
+impl Run for Division {
+    type Output = i32;
+
+    fn run(&self, handle: &mut DbHandle<impl crate::Computation>) -> Self::Output {
+        *handle.get(NUMERATOR) / *handle.get(DENOMINATOR)
+    }
+}
+
+impl Run for DenominatorIs0 {
+    type Output = bool;
+
+    fn run(&self, handle: &mut DbHandle<impl crate::Computation>) -> Self::Output {
+        *handle.get(DENOMINATOR) == 0
+    }
+}
+
+impl Run for Result {
+    type Output = i32;
+
+    fn run(&self, handle: &mut DbHandle<impl crate::Computation>) -> Self::Output {
+        if *handle.get(DENOMINATOR_IS_0) {
+            0
+        } else {
+            *handle.get(DIVISION)
         }
     }
 }
 
+type SafeDivDb = Db<SafeDiv>;
+
 #[test]
 fn from_scratch() {
     // Run from scratch with Denominator = 0
-    assert_eq!(0i32, *Db::new().get(SafeDiv::Result));
+    assert_eq!(0i32, *SafeDivDb::new().get(RESULT));
 }
 
 #[test]
@@ -53,15 +87,15 @@ fn dynamic_dependency_not_run() {
     // so would result in a divide by zero error.
     //
     // Start with Denominator = 2, then recompute with Denominator = 0
-    let mut db = Db::new();
+    let mut db = SafeDivDb::new();
     assert_eq!(db.version, START_VERSION);
-    db.update_input(SafeDiv::Denominator, Value::new(2i32));
+    db.update_input(DENOMINATOR, 2);
     assert_eq!(db.version, START_VERSION + 1);
 
     // 6 / 2
-    assert_eq!(3i32, *db.get(SafeDiv::Result));
+    assert_eq!(3i32, *db.get(RESULT));
 
-    db.update_input(SafeDiv::Denominator, Value::new(0i32));
+    db.update_input(DENOMINATOR, 0);
     assert_eq!(db.version, START_VERSION + 2);
 
     // Although Division was previously a dependency of Result,
@@ -70,7 +104,7 @@ fn dynamic_dependency_not_run() {
     // If we did recalculate `Division` we would get a divide by zero error.
     //
     // Shouldn't get a divide by zero here
-    assert_eq!(0i32, *db.get(SafeDiv::Result));
+    assert_eq!(0i32, *db.get(RESULT));
 }
 
 /// Test that a dynamic dependency - such as Division for Result - is no longer
@@ -82,19 +116,19 @@ fn dynamic_dependency_not_run() {
 /// without Denominator also changing.
 #[test]
 fn dynamic_dependency_removed() {
-    let mut db = Db::new();
-    db.update_input(SafeDiv::Denominator, Value::new(2i32));
+    let mut db = SafeDivDb::new();
+    db.update_input(DENOMINATOR, 2);
 
     // Compute with non-zero denominator so that Division is registered as a dependency
-    assert_eq!(*db.get::<i32>(SafeDiv::Result), 3);
+    assert_eq!(*db.get(RESULT), 3);
     let divide_changed_version = db.version;
 
     // Re-run with Denominator = 0
-    db.update_input(SafeDiv::Denominator, Value::new(0i32));
-    assert_eq!(*db.get::<i32>(SafeDiv::Result), 0);
+    db.update_input(DENOMINATOR, 0);
+    assert_eq!(*db.get(RESULT), 0);
 
     let divide0_version = db.version;
-    let result_cell = db.get_cell_value(&SafeDiv::Result);
+    let result_cell = db.unwrap_cell_value(&RESULT);
     let result_last_verified = result_cell.last_verified_version;
     let result_last_updated = result_cell.last_updated_version;
 
@@ -106,15 +140,15 @@ fn dynamic_dependency_removed() {
     // Now update the Numerator and test that Result is not re-computed.
     // If Division were still a dependency, updating Numerator would trigger
     // Division to be updated, which would also update Result.
-    db.update_input(SafeDiv::Numerator, Value::new(12i32));
-    assert_eq!(*db.get::<bool>(SafeDiv::DenominatorIs0), true);
+    db.update_input(NUMERATOR, 12);
+    assert!(*db.get(DENOMINATOR_IS_0));
 
     // DenominatorIs0 was just verified, ensure that Result does not need to be recomputed.
     // If Division were still a dependency, we'd expect Result to be stale.
-    assert!(!db.is_stale(&SafeDiv::Result));
+    assert!(!db.is_stale(&RESULT));
 
     // Division shouldn't have been updated or verified in a while
-    let division_cell = db.get_cell_value(&SafeDiv::Division);
+    let division_cell = db.unwrap_cell_value(&DIVISION);
     let division_last_verified = division_cell.last_verified_version;
     let division_last_updated = division_cell.last_updated_version;
     assert_eq!(division_last_verified, divide_changed_version);

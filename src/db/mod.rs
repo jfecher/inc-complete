@@ -33,7 +33,7 @@ impl<C: Computation> Db<C> {
     /// Inputs which have never been computed are also considered stale.
     ///
     /// This does not actually re-compute the input.
-    pub fn is_stale(&self, input: &C) -> bool {
+    pub fn is_stale<Concrete: Computation>(&self, input: &Concrete) -> bool {
         // If the cell doesn't exist, it is definitely stale
         let Some(cell) = self.get_cell(input) else {
             return true;
