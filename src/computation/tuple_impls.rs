@@ -152,6 +152,14 @@ impl<A, B> Computation for (A, B) where
         }
     }
 
+    fn get_storage<Concrete: Computation + 'static>(computation_id: u32, container: &Self::Storage) -> &Concrete::Storage {
+        if computation_id == 0 {
+            A::get_storage::<Concrete>(computation_id, &container.0)
+        } else {
+            B::get_storage::<Concrete>(computation_id - 1, &container.1)
+        }
+    }
+
     fn get_storage_mut<Concrete: Computation + 'static>(computation_id: u32, container: &mut Self::Storage) -> &mut Concrete::Storage {
         if computation_id == 0 {
             A::get_storage_mut::<Concrete>(computation_id, &mut container.0)
@@ -160,29 +168,35 @@ impl<A, B> Computation for (A, B) where
         }
     }
 
-    fn dispatch_run<FullComputation>(cell: Cell, computation_id: u32, db: &mut Db<FullComputation>) -> bool
+    fn dispatch_run<FullComputation>(cell: Cell, computation_id: u32, original_computation_id: u32, db: &mut Db<FullComputation>) -> bool
         where FullComputation: Computation,
               Self: Clone,
               Self::Output: Eq,
     {
         if computation_id == 0 {
-            // TODO: Rework generics
-            A::dispatch_run(cell, computation_id, db)
+            A::dispatch_run(cell, computation_id, original_computation_id, db)
         } else {
-            B::dispatch_run(cell, computation_id - 1, db)
+            B::dispatch_run(cell, computation_id - 1, original_computation_id, db)
         }
     }
 
-    fn dispatch_update_output<Concrete, FullComputation>(cell: Cell, computation_id: u32, output: Concrete::Output, db: &mut Db<FullComputation>) -> bool
+    fn output_is_unset<FullComputation: Computation>(cell: Cell, computation_id: u32, original_computation_id: u32, db: &Db<FullComputation>) -> bool {
+        if computation_id == 0 {
+            A::output_is_unset(cell, computation_id, original_computation_id, db)
+        } else {
+            B::output_is_unset(cell, computation_id - 1, original_computation_id, db)
+        }
+    }
+
+    fn dispatch_update_output<Concrete, FullComputation>(cell: Cell, computation_id: u32, original_computation_id: u32, output: Concrete::Output, db: &mut Db<FullComputation>) -> bool
         where Concrete: Computation,
               FullComputation: Computation,
               Self::Output: Eq,
     {
         if computation_id == 0 {
-            // TODO: Rework generics
-            A::dispatch_update_output::<Concrete, FullComputation>(cell, computation_id, output, db)
+            A::dispatch_update_output::<Concrete, FullComputation>(cell, computation_id, original_computation_id, output, db)
         } else {
-            B::dispatch_update_output::<Concrete, FullComputation>(cell, computation_id - 1, output, db)
+            B::dispatch_update_output::<Concrete, FullComputation>(cell, computation_id - 1, original_computation_id, output, db)
         }
     }
 
@@ -250,6 +264,16 @@ impl<A, B, C> Computation for (A, B, C) where
         }
     }
 
+    fn get_storage<Concrete: Computation + 'static>(computation_id: u32, container: &Self::Storage) -> &Concrete::Storage {
+        if computation_id == 0 {
+            A::get_storage::<Concrete>(computation_id, &container.0)
+        } else if computation_id == 1 {
+            B::get_storage::<Concrete>(computation_id - 1, &container.1)
+        } else {
+            C::get_storage::<Concrete>(computation_id - 2, &container.2)
+        }
+    }
+
     fn get_storage_mut<Concrete: Computation + 'static>(computation_id: u32, container: &mut Self::Storage) -> &mut Concrete::Storage {
         if computation_id == 0 {
             A::get_storage_mut::<Concrete>(computation_id, &mut container.0)
@@ -260,31 +284,41 @@ impl<A, B, C> Computation for (A, B, C) where
         }
     }
 
-    fn dispatch_run<FullComputation>(cell: Cell, computation_id: u32, db: &mut Db<FullComputation>) -> bool
+    fn dispatch_run<FullComputation>(cell: Cell, computation_id: u32, original_computation_id: u32, db: &mut Db<FullComputation>) -> bool
         where FullComputation: Computation,
               Self: Clone,
               Self::Output: Eq,
     {
         if computation_id == 0 {
-            A::dispatch_run(cell, computation_id, db)
+            A::dispatch_run(cell, computation_id, original_computation_id, db)
         } else if computation_id == 1 {
-            B::dispatch_run(cell, computation_id - 1, db)
+            B::dispatch_run(cell, computation_id - 1, original_computation_id, db)
         } else {
-            C::dispatch_run(cell, computation_id - 2, db)
+            C::dispatch_run(cell, computation_id - 2, original_computation_id, db)
         }
     }
 
-    fn dispatch_update_output<Concrete, FullComputation>(cell: Cell, computation_id: u32, output: Concrete::Output, db: &mut Db<FullComputation>) -> bool
+    fn output_is_unset<FullComputation: Computation>(cell: Cell, computation_id: u32, original_computation_id: u32, db: &Db<FullComputation>) -> bool {
+        if computation_id == 0 {
+            A::output_is_unset(cell, computation_id, original_computation_id, db)
+        } else if computation_id == 1 {
+            B::output_is_unset(cell, computation_id - 1, original_computation_id, db)
+        } else {
+            C::output_is_unset(cell, computation_id - 2, original_computation_id, db)
+        }
+    }
+
+    fn dispatch_update_output<Concrete, FullComputation>(cell: Cell, computation_id: u32, original_computation_id: u32, output: Concrete::Output, db: &mut Db<FullComputation>) -> bool
         where Concrete: Computation,
               FullComputation: Computation,
               Self::Output: Eq,
     {
         if computation_id == 0 {
-            A::dispatch_update_output::<Concrete, FullComputation>(cell, computation_id, output, db)
+            A::dispatch_update_output::<Concrete, FullComputation>(cell, computation_id, original_computation_id, output, db)
         } else if computation_id == 1 {
-            B::dispatch_update_output::<Concrete, FullComputation>(cell, computation_id - 1, output, db)
+            B::dispatch_update_output::<Concrete, FullComputation>(cell, computation_id - 1, original_computation_id, output, db)
         } else {
-            C::dispatch_update_output::<Concrete, FullComputation>(cell, computation_id - 2, output, db)
+            C::dispatch_update_output::<Concrete, FullComputation>(cell, computation_id - 2, original_computation_id, output, db)
         }
     }
 
@@ -359,8 +393,24 @@ impl<A, B, C, D, E> Computation for (A, B, C, D, E) where
             1
         } else if TypeId::of::<T>() == TypeId::of::<C>() {
             2
+        } else if TypeId::of::<T>() == TypeId::of::<D>() {
+            3
         } else {
-            3 + D::computation_id_of::<T>()
+            4 + E::computation_id_of::<T>()
+        }
+    }
+
+    fn get_storage<Concrete: Computation + 'static>(computation_id: u32, container: &Self::Storage) -> &Concrete::Storage {
+        if computation_id == 0 {
+            A::get_storage::<Concrete>(computation_id, &container.0)
+        } else if computation_id == 1 {
+            B::get_storage::<Concrete>(computation_id - 1, &container.1)
+        } else if computation_id == 2 {
+            C::get_storage::<Concrete>(computation_id - 2, &container.2)
+        } else if computation_id == 3 {
+            D::get_storage::<Concrete>(computation_id - 3, &container.3)
+        } else {
+            E::get_storage::<Concrete>(computation_id - 4, &container.4)
         }
     }
 
@@ -371,40 +421,60 @@ impl<A, B, C, D, E> Computation for (A, B, C, D, E) where
             B::get_storage_mut::<Concrete>(computation_id - 1, &mut container.1)
         } else if computation_id == 2 {
             C::get_storage_mut::<Concrete>(computation_id - 2, &mut container.2)
-        } else {
+        } else if computation_id == 3 {
             D::get_storage_mut::<Concrete>(computation_id - 3, &mut container.3)
+        } else {
+            E::get_storage_mut::<Concrete>(computation_id - 4, &mut container.4)
         }
     }
 
-    fn dispatch_run<FullComputation>(cell: Cell, computation_id: u32, db: &mut Db<FullComputation>) -> bool
+    fn dispatch_run<FullComputation>(cell: Cell, computation_id: u32, original_computation_id: u32, db: &mut Db<FullComputation>) -> bool
         where FullComputation: Computation,
               Self: Clone,
               Self::Output: Eq,
     {
         if computation_id == 0 {
-            A::dispatch_run(cell, computation_id, db)
+            A::dispatch_run(cell, computation_id, original_computation_id, db)
         } else if computation_id == 1 {
-            B::dispatch_run(cell, computation_id - 1, db)
+            B::dispatch_run(cell, computation_id - 1, original_computation_id, db)
         } else if computation_id == 2 {
-            C::dispatch_run(cell, computation_id - 2, db)
+            C::dispatch_run(cell, computation_id - 2, original_computation_id, db)
+        } else if computation_id == 3 {
+            D::dispatch_run(cell, computation_id - 3, original_computation_id, db)
         } else {
-            D::dispatch_run(cell, computation_id - 3, db)
+            E::dispatch_run(cell, computation_id - 4, original_computation_id, db)
         }
     }
 
-    fn dispatch_update_output<Concrete, FullComputation>(cell: Cell, computation_id: u32, output: Concrete::Output, db: &mut Db<FullComputation>) -> bool
+    fn output_is_unset<FullComputation: Computation>(cell: Cell, computation_id: u32, original_computation_id: u32, db: &Db<FullComputation>) -> bool {
+        if computation_id == 0 {
+            A::output_is_unset(cell, computation_id, original_computation_id, db)
+        } else if computation_id == 1 {
+            B::output_is_unset(cell, computation_id - 1, original_computation_id, db)
+        } else if computation_id == 2 {
+            C::output_is_unset(cell, computation_id - 2, original_computation_id, db)
+        } else if computation_id == 3 {
+            D::output_is_unset(cell, computation_id - 3, original_computation_id, db)
+        } else {
+            E::output_is_unset(cell, computation_id - 4, original_computation_id, db)
+        }
+    }
+
+    fn dispatch_update_output<Concrete, FullComputation>(cell: Cell, computation_id: u32, original_computation_id: u32, output: Concrete::Output, db: &mut Db<FullComputation>) -> bool
         where Concrete: Computation,
               FullComputation: Computation,
               Self::Output: Eq,
     {
         if computation_id == 0 {
-            A::dispatch_update_output::<Concrete, FullComputation>(cell, computation_id, output, db)
+            A::dispatch_update_output::<Concrete, FullComputation>(cell, computation_id, original_computation_id, output, db)
         } else if computation_id == 1 {
-            B::dispatch_update_output::<Concrete, FullComputation>(cell, computation_id - 1, output, db)
+            B::dispatch_update_output::<Concrete, FullComputation>(cell, computation_id - 1, original_computation_id, output, db)
         } else if computation_id == 2 {
-            C::dispatch_update_output::<Concrete, FullComputation>(cell, computation_id - 2, output, db)
+            C::dispatch_update_output::<Concrete, FullComputation>(cell, computation_id - 2, original_computation_id, output, db)
+        } else if computation_id == 3 {
+            D::dispatch_update_output::<Concrete, FullComputation>(cell, computation_id - 3, original_computation_id, output, db)
         } else {
-            D::dispatch_update_output::<Concrete, FullComputation>(cell, computation_id - 3, output, db)
+            E::dispatch_update_output::<Concrete, FullComputation>(cell, computation_id - 4, original_computation_id, output, db)
         }
     }
 
@@ -418,8 +488,10 @@ impl<A, B, C, D, E> Computation for (A, B, C, D, E) where
             B::dispatch_input_to_cell::<Concrete>(input, &container.1)
         } else if concrete_id == TypeId::of::<C>() {
             C::dispatch_input_to_cell::<Concrete>(input, &container.2)
-        } else {
+        } else if concrete_id == TypeId::of::<D>() {
             D::dispatch_input_to_cell::<Concrete>(input, &container.3)
+        } else {
+            E::dispatch_input_to_cell::<Concrete>(input, &container.4)
         }
     }
 
@@ -434,8 +506,10 @@ impl<A, B, C, D, E> Computation for (A, B, C, D, E) where
             B::dispatch_insert_new_cell::<Concrete>(cell, input, &mut storage.1)
         } else if concrete_id == TypeId::of::<C>() {
             C::dispatch_insert_new_cell::<Concrete>(cell, input, &mut storage.2)
-        } else {
+        } else if concrete_id == TypeId::of::<D>() {
             D::dispatch_insert_new_cell::<Concrete>(cell, input, &mut storage.3)
+        } else {
+            E::dispatch_insert_new_cell::<Concrete>(cell, input, &mut storage.4)
         }
     }
 }

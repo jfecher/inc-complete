@@ -34,6 +34,7 @@ impl Run for A2 {
     type Output = i32;
 
     fn run(&self, handle: &mut DbHandle<impl Computation>) -> Self::Output {
+        println!("run A2");
         handle.get(A1_C) + 1
     }
 }
@@ -42,6 +43,7 @@ impl Run for A3 {
     type Output = i32;
 
     fn run(&self, handle: &mut DbHandle<impl Computation>) -> Self::Output {
+        println!("run A3");
         handle.get(A2_C) + 2
     }
 }

@@ -1,4 +1,3 @@
-use std::any::Any;
 use crate::{Cell, Computation};
 use petgraph::graph::DiGraph;
 use crate::cell::CellData;
@@ -44,6 +43,11 @@ impl<C: Computation> Db<C> {
     /// True if a given cell is stale and needs to be re-computed.
     /// This does not actually re-compute the input.
     pub fn is_stale_cell(&self, cell: Cell) -> bool {
+        let computation_id = self.cells[cell.index()].computation_id;
+        if C::output_is_unset::<C>(cell, computation_id, computation_id, self) {
+            return true;
+        }
+
         let neighbors = self.cells.neighbors(cell.index()).collect::<Vec<_>>();
 
         // if any dependency may have changed, this cell is stale
@@ -98,7 +102,7 @@ impl<C: Computation> Db<C> {
         let cell = &self.cells[cell_id.index()];
         let computation_id = cell.computation_id;
 
-        let changed = C::dispatch_update_output::<ConcreteC, C>(cell_id, computation_id, new_value, self);
+        let changed = C::dispatch_update_output::<ConcreteC, C>(cell_id, computation_id, computation_id, new_value, self);
         let cell = &mut self.cells[cell_id.index()];
 
         if changed {
@@ -116,6 +120,10 @@ impl<C: Computation> Db<C> {
 
     pub(crate) fn handle(&mut self, cell: Cell) -> DbHandle<C> {
         DbHandle::new(self, cell)
+    }
+
+    pub fn storage(&self) -> &C::Storage {
+        &self.storage
     }
 
     pub fn storage_mut(&mut self) -> &mut C::Storage {
@@ -141,7 +149,7 @@ impl<C: Computation + Clone> Db<C> where C::Output: Eq {
         let cell = &self.cells[cell_id.index()];
         let computation_id = cell.computation_id;
 
-        let changed = C::dispatch_run::<C>(cell_id, computation_id, self);
+        let changed = C::dispatch_run::<C>(cell_id, computation_id, computation_id, self);
 
         let cell = &mut self.cells[cell_id.index()];
         cell.last_verified_version = self.version;
@@ -171,10 +179,7 @@ impl<C: Computation + Clone> Db<C> where C::Output: Eq {
     /// necessary.
     ///
     /// This function can panic if the dynamic type of the value returned by `compute.run(..)` is not `T`.
-    pub fn get<Concrete: Computation>(&mut self, compute: Concrete) -> &Concrete::Output
-    where
-        C: std::fmt::Debug,
-    {
+    pub fn get<Concrete: Computation>(&mut self, compute: Concrete) -> &Concrete::Output {
         let cell_id = self.get_or_insert_cell(compute);
         self.get_with_cell::<Concrete>(cell_id)
     }
@@ -188,11 +193,7 @@ impl<C: Computation + Clone> Db<C> where C::Output: Eq {
 
         let computation_id = self.cells[cell_id.index()].computation_id;
         let container = C::get_storage_mut::<Concrete>(computation_id, self.storage_mut());
-        let output = Concrete::get_function_and_output(cell_id, container).1
-            .expect("cell result should have been computed already");
-
-        (output as &dyn Any).downcast_ref().unwrap_or_else(|| {
-            panic!("Output type to `Db::get_with_cell` does not match the type of the value returned by the `Computation::run` function")
-        })
+        Concrete::get_function_and_output(cell_id, container).1
+            .expect("cell result should have been computed already")
     }
 }
