@@ -25,7 +25,7 @@ impl<'db, C: Computation> DbHandle<'db, C> {
         Self { db, current_operation }
     }
 
-    pub fn get<ConcreteC: Computation>(&mut self, compute: ConcreteC) -> &ConcreteC::Output
+    pub fn get<Concrete: Computation>(&mut self, compute: Concrete) -> &Concrete::Output
         where C::Output: Eq, C: Clone
     {
         // Register the dependency
@@ -33,6 +33,6 @@ impl<'db, C: Computation> DbHandle<'db, C> {
         self.db.cells.update_edge(self.current_operation.index(), dependency.index(), ());
 
         // Fetch the current value of the dependency
-        self.db.get_with_cell(dependency)
+        self.db.get_with_cell::<Concrete>(dependency)
     }
 }

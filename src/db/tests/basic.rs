@@ -12,15 +12,15 @@ use crate::Run;
 // 1 [ =20 ]
 // 2 [ =A1 + 1 ]
 // 3 [ =A2 + 2 ]
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct A1;
 const A1_C: Input<A1> = Input::new();
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct A2;
 const A2_C: Cached<A2> = Cached::new(A2);
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct A3;
 const A3_C: Cached<A3> = Cached::new(A3);
 
@@ -65,9 +65,9 @@ fn basic() {
 // 3 [ =A2 + 2 ]
 #[test]
 fn no_recompute_basic() {
-    let mut db = Db::new();
-    let result1 = *db.get::<i32>(Basic::A3);
-    let result2 = *db.get::<i32>(Basic::A3);
+    let mut db = Db::<Spreadsheet>::new();
+    let result1 = *db.get(A3_C);
+    let result2 = *db.get(A3_C);
     assert_eq!(result1, 23);
     assert_eq!(result2, 23);
 
@@ -75,15 +75,15 @@ fn no_recompute_basic() {
     let expected_version = START_VERSION;
     assert_eq!(db.version, expected_version);
 
-    let a1 = db.unwrap_cell_value(&Basic::A1);
+    let a1 = db.unwrap_cell_value(&A1_C);
     assert_eq!(a1.last_updated_version, expected_version);
     assert_eq!(a1.last_verified_version, expected_version);
 
-    let a2 = db.get_cell_value(&Basic::A2);
+    let a2 = db.unwrap_cell_value(&A2_C);
     assert_eq!(a2.last_updated_version, expected_version);
     assert_eq!(a2.last_verified_version, expected_version);
 
-    let a3 = db.get_cell_value(&Basic::A3);
+    let a3 = db.unwrap_cell_value(&A3_C);
     assert_eq!(a3.last_updated_version, expected_version);
     assert_eq!(a3.last_verified_version, expected_version);
 }

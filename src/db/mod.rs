@@ -98,7 +98,7 @@ impl<C: Computation> Db<C> {
         let cell = &self.cells[cell_id.index()];
         let computation_id = cell.computation_id;
 
-        let changed = C::dispatch_update_output::<ConcreteC>(cell_id, computation_id, new_value, self);
+        let changed = C::dispatch_update_output::<ConcreteC, C>(cell_id, computation_id, new_value, self);
         let cell = &mut self.cells[cell_id.index()];
 
         if changed {
@@ -123,9 +123,9 @@ impl<C: Computation> Db<C> {
     }
 
     #[cfg(test)]
-    pub(crate) fn unwrap_cell_value(&self, input: &C) -> &CellData where C: std::fmt::Debug {
+    pub(crate) fn unwrap_cell_value<Concrete: Computation>(&self, input: &Concrete) -> &CellData where Concrete: std::fmt::Debug {
         let cell = self.get_cell(input).unwrap_or_else(|| {
-            panic!("get_cell_value: Expected cell for `{input:?}` to exist")
+            panic!("unwrap_cell_value: Expected cell for `{input:?}` to exist")
         });
         &self.cells[cell.index()]
     }
@@ -171,24 +171,24 @@ impl<C: Computation + Clone> Db<C> where C::Output: Eq {
     /// necessary.
     ///
     /// This function can panic if the dynamic type of the value returned by `compute.run(..)` is not `T`.
-    pub fn get<ConcreteC: Computation>(&mut self, compute: ConcreteC) -> &ConcreteC::Output
+    pub fn get<Concrete: Computation>(&mut self, compute: Concrete) -> &Concrete::Output
     where
         C: std::fmt::Debug,
     {
         let cell_id = self.get_or_insert_cell(compute);
-        self.get_with_cell(cell_id)
+        self.get_with_cell::<Concrete>(cell_id)
     }
 
     /// Retrieves the up to date value for the given cell, re-running any dependencies as
     /// necessary.
     ///
     /// This function can panic if the dynamic type of the value returned by `compute.run(..)` is not `T`.
-    pub fn get_with_cell<'a, T: 'static>(&'a mut self, cell_id: Cell) -> &'a T {
+    pub fn get_with_cell<Concrete: Computation>(&mut self, cell_id: Cell) -> &Concrete::Output {
         self.update_cell(cell_id);
 
         let computation_id = self.cells[cell_id.index()].computation_id;
-        let container = C::get_storage_mut(computation_id, self.storage_mut());
-        let output = C::get_function_and_output(cell_id, container).1
+        let container = C::get_storage_mut::<Concrete>(computation_id, self.storage_mut());
+        let output = Concrete::get_function_and_output(cell_id, container).1
             .expect("cell result should have been computed already");
 
         (output as &dyn Any).downcast_ref().unwrap_or_else(|| {

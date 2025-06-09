@@ -1,6 +1,8 @@
 use std::{any::{Any, TypeId}, collections::HashMap, hash::Hash};
 use crate::{Cell, Db, DbHandle};
 
+mod tuple_impls;
+
 pub trait Computation: 'static + Sized + Clone {
     type Storage;
     type Output: Eq;
@@ -21,11 +23,11 @@ pub trait Computation: 'static + Sized + Clone {
         0
     }
 
-    fn get_storage_mut<C: 'static>(computation_id: u32, container: &mut C) -> &mut Self::Storage {
+    fn get_storage_mut<Concrete: Computation + 'static>(computation_id: u32, container: &mut Self::Storage) -> &mut Concrete::Storage {
         assert_eq!(computation_id, Self::computation_id_of::<Self>(),
             "Type dispatch failed for get_c2o_container_mut container");
 
-        assert_eq!(TypeId::of::<C>(), TypeId::of::<Self::Storage>(),
+        assert_eq!(TypeId::of::<Concrete>(), TypeId::of::<Self::Storage>(),
             "Type dispatch failed for get_c2o_container_mut container type");
 
         // Safety: We confirmed above C == Self::InputToCell and thus `&mut C == &mut Self::InputToCell`
@@ -37,27 +39,32 @@ pub trait Computation: 'static + Sized + Clone {
     /// Given a Cell, TypeId pair dispatch to the correct run function
     /// and return true if the value has changed. This should also cache
     /// the new value if it has changed.
-    fn dispatch_run<T>(cell: Cell, computation_id: u32, db: &mut Db<impl Computation>) -> bool
-        where T: Computation,
-              Self: Clone,
+    /// Note that in dispatch functions `Self` is always the concrete, non-tuple type.
+    fn dispatch_run<FullComputation: Computation>(cell: Cell, computation_id: u32, db: &mut Db<FullComputation>) -> bool
+        where Self: Clone,
               Self::Output: Eq,
     {
         assert_eq!(computation_id, Self::computation_id_of::<Self>(),
             "Type dispatch failed for computation");
 
-        let container = Self::get_storage_mut(computation_id, db.storage_mut());
+        let container = FullComputation::get_storage_mut::<Self>(computation_id, db.storage_mut());
         let function = Self::get_function_and_output(cell, container).0.clone();
         let output = function.run(&mut db.handle(cell));
-        Self::dispatch_update_output::<Self>(cell, computation_id, output, db)
+        Self::dispatch_update_output::<Self, FullComputation>(cell, computation_id, output, db)
     }
 
     /// Dispatch to the correct update_output function to cache the new output
     /// and return true if the value has changed.
-    fn dispatch_update_output<T>(cell: Cell, computation_id: u32, output: T::Output, db: &mut Db<impl Computation>) -> bool
-        where T: Computation,
+    /// Note that in dispatch functions `Self` is the current type being dispatched,
+    /// `Concrete`, if present, is the non-tuple type of the target computation,
+    /// and `FullComputation` is the type of the `Db` computation parameter which is
+    /// usually a tuple of every possible computation.
+    fn dispatch_update_output<Concrete, FullComputation>(cell: Cell, computation_id: u32, output: Concrete::Output, db: &mut Db<FullComputation>) -> bool
+        where Concrete: Computation,
+              FullComputation: Computation,
               Self::Output: Eq,
     {
-        assert_eq!(TypeId::of::<T::Output>(), TypeId::of::<Self::Output>(),
+        assert_eq!(TypeId::of::<Concrete::Output>(), TypeId::of::<Self::Output>(),
             "Type dispatch failed for dispatch_run output type");
 
         // Safety: We just checked T::Output == Self::Output above, we should be copying
@@ -65,7 +72,7 @@ pub trait Computation: 'static + Sized + Clone {
         let output2: Self::Output = unsafe { std::mem::transmute_copy(&output) };
         std::mem::forget(output);
 
-        let container = Self::get_storage_mut(computation_id, db.storage_mut());
+        let container = FullComputation::get_storage_mut::<Self>(computation_id, db.storage_mut());
 
         let (_, previous_value) = Self::get_function_and_output(cell, container);
         let changed = previous_value.map_or(true, |previous| output2 != *previous);
@@ -77,19 +84,19 @@ pub trait Computation: 'static + Sized + Clone {
         changed
     }
 
-    fn dispatch_input_to_cell<T>(input: &T, container: &Self::Storage) -> Option<Cell>
-        where T: 'static + Computation + Any 
+    fn dispatch_input_to_cell<Concrete>(input: &Concrete, container: &Self::Storage) -> Option<Cell>
+        where Concrete: 'static + Computation + Any 
     {
-        assert_eq!(TypeId::of::<T>(), TypeId::of::<Self>());
+        assert_eq!(TypeId::of::<Concrete>(), TypeId::of::<Self>());
         let input = (input as &dyn Any).downcast_ref().expect("T == Self");
         Self::input_to_cell(input, container)
     }
 
-    fn dispatch_insert_new_cell<T>(cell: Cell, input: T, storage: &mut Self::Storage)
-        where T: 'static + Computation + Any,
-              T::Storage: 'static,
+    fn dispatch_insert_new_cell<Concrete>(cell: Cell, input: Concrete, storage: &mut Self::Storage)
+        where Concrete: 'static + Computation + Any,
+              Concrete::Storage: 'static,
     {
-        let input = transmute_copy_checked::<T, Self>(input);
+        let input = transmute_copy_checked::<Concrete, Self>(input);
         Self::insert_new_cell(cell, input, storage)
     }
 }
@@ -196,95 +203,5 @@ impl<T: OutputTypeForInput + 'static> Computation for Input<T> {
     fn insert_new_cell(cell: Cell, _: Self, storage: &mut Self::Storage) {
         storage.0 = Some(cell);
         storage.1 = None;
-    }
-}
-
-impl<A, B> Computation for (A, B) where
-    A: Computation,
-    B: Computation,
-{
-    type Storage = (A::Storage, B::Storage);
-    type Output = ();
-
-    fn run(&self, _: &mut DbHandle<impl Computation>) -> Self::Output {
-        panic!("Type dispatch failed in `run`")
-    }
-
-    fn input_to_cell(_: &Self, _: &Self::Storage) -> Option<Cell> {
-        panic!("Type dispatch failed in `input_to_cell`")
-    }
-
-    fn insert_new_cell(_: Cell, _: Self, _: &mut Self::Storage) {
-        panic!("Type dispatch failed in `insert_new_cell`")
-    }
-
-    fn get_function_and_output(_: Cell, _: &Self::Storage) -> (&Self, Option<&Self::Output>) {
-        panic!("Type dispatch failed in `get_function_and_output`")
-    }
-
-    fn set_output(_: Cell, _: Self::Output, _: &mut Self::Storage) {
-        panic!("Type dispatch failed in `set_output`")
-    }
-
-    fn computation_id_of<T: Computation>() -> u32 {
-        if TypeId::of::<T>() == TypeId::of::<A>() {
-            0
-        } else {
-            1 + B::computation_id_of::<T>()
-        }
-    }
-
-    fn get_storage_mut<C: 'static>(computation_id: u32, container: &mut C) -> &mut Self::Storage {
-        if computation_id == 0 {
-            A::get_storage_mut(computation_id, container)
-        } else {
-            B::get_storage_mut(computation_id - 1, container)
-        }
-    }
-
-    fn dispatch_run<T>(cell: Cell, computation_id: u32, db: &mut Db<impl Computation>) -> bool
-        where T: Computation,
-              Self: Clone,
-              Self::Output: Eq,
-    {
-        if computation_id == 0 {
-            // TODO: Rework generics
-            A::dispatch_run::<Self>(cell, computation_id, db)
-        } else {
-            B::dispatch_run::<Self>(cell, computation_id - 1, db)
-        }
-    }
-
-    fn dispatch_update_output<T>(cell: Cell, computation_id: u32, output: T::Output, db: &mut Db<impl Computation>) -> bool
-        where T: Computation,
-              Self::Output: Eq,
-    {
-        if computation_id == 0 {
-            // TODO: Rework generics
-            A::dispatch_update_output::<Self>(cell, computation_id, output, db)
-        } else {
-            B::dispatch_update_output::<Self>(cell, computation_id - 1, output, db)
-        }
-    }
-
-    fn dispatch_input_to_cell<T>(input: &T, container: &Self::Storage) -> Option<Cell>
-        where T: 'static + Computation + Any 
-    {
-        if TypeId::of::<T>() == TypeId::of::<A>() {
-            T::dispatch_input_to_cell::<A>(input, container)
-        } else {
-            T::dispatch_input_to_cell::<B>(input, container)
-        }
-    }
-
-    fn dispatch_insert_new_cell<T>(cell: Cell, input: T, storage: &mut Self::Storage)
-        where T: 'static + Computation + Any,
-              T::Storage: 'static,
-    {
-        if TypeId::of::<T>() == TypeId::of::<A>() {
-            T::dispatch_insert_new_cell::<A>(cell, input, storage)
-        } else {
-            T::dispatch_insert_new_cell::<B>(cell, input, storage)
-        }
     }
 }
