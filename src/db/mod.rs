@@ -214,6 +214,7 @@ where
         self.update_cell(cell_id);
 
         let computation_id = self.cells[cell_id.index()].computation_id;
+        println!("get_with_cell get_storage_mut::<{}> with id {}", std::any::type_name::<Concrete>(), computation_id);
         let container = C::get_storage_mut::<Concrete>(computation_id, self.storage_mut());
         Concrete::get_function_and_output(cell_id, container)
             .1
