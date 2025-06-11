@@ -9,8 +9,7 @@ number of steps when an input is changed. Example uses:
 Compared to existing solutions like [salsa](https://github.com/salsa-rs/salsa) or [adapton](https://docs.rs/adapton/latest/adapton/),
 inc-complete is built from the ground-up to support one feature: (de)serialization to enable
 incremental compilers across separate compiler runs. If you do not need this I recommend using
-a more mature library like Salsa instead. If you do need this then inc-complete is the only library for
-incremental compilation I'm aware of for Rust which supports this.
+a more mature library like Salsa instead. If you do need this then continue reading!
 
 ## Status
 
