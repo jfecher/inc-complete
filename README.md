@@ -27,9 +27,8 @@ the format is not currently stable across releases of inc-complete.
 ## Planned Features & Roadmap
 
 - [ ] Thread-safe with helpers to query multiple dependencies and update them on separate threads
-- Safety Checks:
-  - [ ] Cyclical dependency check
-  - [ ] Manually invoked garbage collection for old cached computation results
+- [ ] Cyclical dependency check for debugging
+- [ ] Manually invoked garbage collection for old cached computation results
 
 ## Quick Start
 
