@@ -1,32 +1,52 @@
-use crate::{Cached, Db, DbHandle, Input, OutputTypeForInput, Run, db::START_VERSION};
+use crate::{Intermediate, SingletonStorage, Db, DbHandle, Input, OutputTypeForInput, Run, db::START_VERSION};
 
 type SafeDiv = (
-    Input<Numerator>,
-    Input<Denominator>,
-    Cached<Division>,
-    Cached<DenominatorIs0>,
-    Cached<Result>,
+    SingletonStorage<Input<Numerator>>,
+    SingletonStorage<Input<Denominator>>,
+    SingletonStorage<Intermediate<Division>>,
+    SingletonStorage<Intermediate<DenominatorIs0>>,
+    SingletonStorage<Intermediate<Result>>,
 );
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 struct Numerator;
-const NUMERATOR: Input<Numerator> = Input::new();
+impl Numerator {
+    fn new() -> SingletonStorage<Input<Numerator>> {
+        Default::default()
+    }
+}
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 struct Denominator;
-const DENOMINATOR: Input<Denominator> = Input::new();
+impl Denominator {
+    fn new() -> SingletonStorage<Input<Denominator>> {
+        Default::default()
+    }
+}
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 struct Division;
-const DIVISION: Cached<Division> = Cached::new(Division);
+impl Division {
+    fn new() -> SingletonStorage<Intermediate<Division>> {
+        Default::default()
+    }
+}
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 struct DenominatorIs0;
-const DENOMINATOR_IS_0: Cached<DenominatorIs0> = Cached::new(DenominatorIs0);
+impl DenominatorIs0 {
+    fn new() -> SingletonStorage<Intermediate<DenominatorIs0>> {
+        Default::default()
+    }
+}
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 struct Result;
-const RESULT: Cached<Result> = Cached::new(Result);
+impl Result {
+    fn new() -> SingletonStorage<Intermediate<Result>> {
+        Default::default()
+    }
+}
 
 impl OutputTypeForInput for Numerator {
     type Output = i32;
@@ -40,7 +60,7 @@ impl Run for Division {
     type Output = i32;
 
     fn run(&self, handle: &mut DbHandle<impl crate::Computation>) -> Self::Output {
-        *handle.get(NUMERATOR) / *handle.get(DENOMINATOR)
+        *handle.get(Numerator::new()) / *handle.get(Denominator::new())
     }
 }
 
@@ -48,7 +68,7 @@ impl Run for DenominatorIs0 {
     type Output = bool;
 
     fn run(&self, handle: &mut DbHandle<impl crate::Computation>) -> Self::Output {
-        *handle.get(DENOMINATOR) == 0
+        *handle.get(Denominator::new()) == 0
     }
 }
 
@@ -56,10 +76,10 @@ impl Run for Result {
     type Output = i32;
 
     fn run(&self, handle: &mut DbHandle<impl crate::Computation>) -> Self::Output {
-        if *handle.get(DENOMINATOR_IS_0) {
+        if *handle.get(DenominatorIs0::new()) {
             0
         } else {
-            *handle.get(DIVISION)
+            *handle.get(Division::new())
         }
     }
 }
@@ -70,9 +90,9 @@ type SafeDivDb = Db<SafeDiv>;
 fn from_scratch() {
     // Run from scratch
     let mut db = SafeDivDb::new();
-    db.update_input(NUMERATOR, 6);
-    db.update_input(DENOMINATOR, 0);
-    assert_eq!(0i32, *db.get(RESULT));
+    db.update_input(Numerator::new(), 6);
+    db.update_input(Denominator::new(), 0);
+    assert_eq!(0i32, *db.get(Result::new()));
 }
 
 #[test]
@@ -91,15 +111,15 @@ fn dynamic_dependency_not_run() {
     //
     // Start with Denominator = 2, then recompute with Denominator = 0
     let mut db = SafeDivDb::new();
-    db.update_input(NUMERATOR, 6);
-    db.update_input(DENOMINATOR, 2);
+    db.update_input(Numerator::new(), 6);
+    db.update_input(Denominator::new(), 2);
 
     assert_eq!(db.version, START_VERSION + 2);
 
     // 6 / 2
-    assert_eq!(3i32, *db.get(RESULT));
+    assert_eq!(3i32, *db.get(Result::new()));
 
-    db.update_input(DENOMINATOR, 0);
+    db.update_input(Denominator::new(), 0);
     assert_eq!(db.version, START_VERSION + 3);
 
     // Although Division was previously a dependency of Result,
@@ -108,7 +128,7 @@ fn dynamic_dependency_not_run() {
     // If we did recalculate `Division` we would get a divide by zero error.
     //
     // Shouldn't get a divide by zero here
-    assert_eq!(0i32, *db.get(RESULT));
+    assert_eq!(0i32, *db.get(Result::new()));
 }
 
 /// Test that a dynamic dependency - such as Division for Result - is no longer
@@ -121,19 +141,19 @@ fn dynamic_dependency_not_run() {
 #[test]
 fn dynamic_dependency_removed() {
     let mut db = SafeDivDb::new();
-    db.update_input(NUMERATOR, 6);
-    db.update_input(DENOMINATOR, 2);
+    db.update_input(Numerator::new(), 6);
+    db.update_input(Denominator::new(), 2);
 
     // Compute with non-zero denominator so that Division is registered as a dependency
-    assert_eq!(*db.get(RESULT), 3);
+    assert_eq!(*db.get(Result::new()), 3);
     let divide_changed_version = db.version;
 
     // Re-run with Denominator = 0
-    db.update_input(DENOMINATOR, 0);
-    assert_eq!(*db.get(RESULT), 0);
+    db.update_input(Denominator::new(), 0);
+    assert_eq!(*db.get(Result::new()), 0);
 
     let divide0_version = db.version;
-    let result_cell = db.unwrap_cell_value(&RESULT);
+    let result_cell = db.unwrap_cell_value(&Result::new());
     let result_last_verified = result_cell.last_verified_version;
     let result_last_updated = result_cell.last_updated_version;
 
@@ -145,15 +165,15 @@ fn dynamic_dependency_removed() {
     // Now update the Numerator and test that Result is not re-computed.
     // If Division were still a dependency, updating Numerator would trigger
     // Division to be updated, which would also update Result.
-    db.update_input(NUMERATOR, 12);
-    assert!(*db.get(DENOMINATOR_IS_0));
+    db.update_input(Numerator::new(), 12);
+    assert!(*db.get(DenominatorIs0::new()));
 
     // DenominatorIs0 was just verified, ensure that Result does not need to be recomputed.
     // If Division were still a dependency, we'd expect Result to be stale.
-    assert!(!db.is_stale(&RESULT));
+    assert!(!db.is_stale(&Result::new()));
 
     // Division shouldn't have been updated or verified in a while
-    let division_cell = db.unwrap_cell_value(&DIVISION);
+    let division_cell = db.unwrap_cell_value(&Division::new());
     let division_last_verified = division_cell.last_verified_version;
     let division_last_updated = division_cell.last_updated_version;
     assert_eq!(division_last_verified, divide_changed_version);

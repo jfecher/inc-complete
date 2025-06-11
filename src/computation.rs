@@ -1,11 +1,18 @@
 use crate::{Cell, Db, DbHandle};
-use std::{
-    any::{Any, TypeId},
-    collections::HashMap,
-    hash::Hash,
-};
+use std::any::{Any, TypeId};
 
 mod tuple_impls;
+mod input;
+mod intermediate;
+mod singleton;
+mod hashmapped;
+mod btreemapped;
+
+pub use input::{ Input, OutputTypeForInput };
+pub use intermediate::{ Intermediate, Run };
+pub use singleton::SingletonStorage;
+pub use hashmapped::HashMapStorage;
+pub use btreemapped::BTreeMapStorage;
 
 pub trait Computation: 'static + Sized + Clone {
     type Storage;
@@ -186,107 +193,4 @@ fn transmute_copy_checked<A: 'static, B: 'static>(x: A) -> B {
     // x2 is copied byte by byte, we need to ensure the destructor is not run twice.
     std::mem::forget(x);
     x2
-}
-
-/// A helper type for defining Computations with HashMap-backed storage
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Cached<T>(T);
-
-impl<T> Cached<T> {
-    pub const fn new(x: T) -> Self {
-        Self(x)
-    }
-}
-
-pub trait Run {
-    type Output: Eq;
-
-    fn run(&self, handle: &mut DbHandle<impl Computation>) -> Self::Output;
-}
-
-impl<T> Computation for Cached<T>
-where
-    T: 'static + Run + Eq + Hash + Clone,
-{
-    type Output = <T as Run>::Output;
-    type Storage = (
-        HashMap<Self, Cell>,
-        HashMap<Cell, (Self, Option<Self::Output>)>,
-    );
-
-    fn run(&self, handle: &mut DbHandle<impl Computation>) -> Self::Output {
-        self.0.run(handle)
-    }
-
-    fn input_to_cell(input: &Self, (self_to_cell, _): &Self::Storage) -> Option<Cell> {
-        self_to_cell.get(input).copied()
-    }
-
-    fn get_function_and_output(
-        cell: Cell,
-        (_, cell_to_output): &Self::Storage,
-    ) -> (&Self, Option<&Self::Output>) {
-        let (this, output) = &cell_to_output[&cell];
-        (this, output.as_ref())
-    }
-
-    fn set_output(cell: Cell, new_output: Self::Output, (_, cell_to_output): &mut Self::Storage) {
-        cell_to_output.entry(cell).and_modify(|(_, output)| {
-            *output = Some(new_output);
-        });
-    }
-
-    fn insert_new_cell(cell: Cell, function: Self, storage: &mut Self::Storage) {
-        storage.0.insert(function.clone(), cell);
-        storage.1.insert(cell, (function, None));
-    }
-}
-
-/// Helper to define a Computation for a simple input type which has no fields and thus
-/// does not require a HashMap to cache each possible value. To use in a `Computation`,
-/// `T` must implement `OutputTypeForInput` to specify its output type. `T` cannot provide
-/// a `run` function since it cannot have any dependencies as an input. Its value must be
-/// manually set via `Db::update_input(db, input, value)`
-///
-/// Examples include `struct SourceFile;` or `struct Time;`
-#[derive(Debug, Clone)]
-pub struct Input<T>(std::marker::PhantomData<T>);
-
-impl<T> Input<T> {
-    pub const fn new() -> Self {
-        Self(std::marker::PhantomData)
-    }
-}
-
-pub trait OutputTypeForInput: Clone {
-    type Output: Eq;
-}
-
-impl<T: OutputTypeForInput + 'static> Computation for Input<T> {
-    type Output = <T as OutputTypeForInput>::Output;
-    type Storage = (Option<Cell>, Option<Self::Output>);
-
-    fn run(&self, _: &mut DbHandle<impl Computation>) -> Self::Output {
-        panic!(
-            "Input `{}` queried before `db.update_input(..)` called",
-            std::any::type_name::<T>()
-        )
-    }
-
-    fn input_to_cell(_: &Self, storage: &Self::Storage) -> Option<Cell> {
-        storage.0
-    }
-
-    fn get_function_and_output(_: Cell, storage: &Self::Storage) -> (&Self, Option<&Self::Output>) {
-        (&Self(std::marker::PhantomData), storage.1.as_ref())
-    }
-
-    fn set_output(_: Cell, new_output: Self::Output, storage: &mut Self::Storage) {
-        storage.1 = Some(new_output);
-    }
-
-    fn insert_new_cell(cell: Cell, _: Self, storage: &mut Self::Storage) {
-        storage.0 = Some(cell);
-        storage.1 = None;
-    }
 }

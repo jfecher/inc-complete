@@ -3,7 +3,7 @@ use std::{
     rc::Rc,
 };
 
-use crate::{Cached, Computation, Db, DbHandle, OutputTypeForInput, Run};
+use crate::{Intermediate, SingletonStorage, HashMapStorage, BTreeMapStorage, Computation, Db, DbHandle, OutputTypeForInput, Run};
 
 /// Test a somewhat more complex case with nested computations
 /// There is a lot of cloning required to create these keys. This can be
@@ -11,17 +11,22 @@ use crate::{Cached, Computation, Db, DbHandle, OutputTypeForInput, Run};
 /// in `Rc` to reduce the cost a bit. This still requires cloning when - e.g.
 /// the argument is mutated such as with the environment parameters.
 type Compiler = (
-    crate::Input<Input>,
-    Cached<Parse>,
-    Cached<Check>,
-    Cached<Execute>,
-    Cached<ExecuteAll>,
+    SingletonStorage<crate::Input<Input>>,
+    SingletonStorage<Intermediate<Parse>>,
+    HashMapStorage<Intermediate<Check>>,
+    // Ensure BTreeMapStorage is tested as well
+    BTreeMapStorage<Intermediate<Execute>>,
+    SingletonStorage<Intermediate<ExecuteAll>>,
 );
 
 /// Input: String
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 struct Input;
-const INPUT: crate::Input<Input> = crate::Input::new();
+impl Input {
+    fn new() -> SingletonStorage<crate::Input<Input>> {
+        Default::default()
+    }
+}
 
 impl OutputTypeForInput for Input {
     type Output = String;
@@ -29,9 +34,13 @@ impl OutputTypeForInput for Input {
 
 /// fn parse() -> Result<Ast, Error>
 ///   depends on: Input
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 struct Parse;
-const PARSE: Cached<Parse> = Cached::new(Parse);
+impl Parse {
+    fn new() -> SingletonStorage<Intermediate<Parse>> {
+        Default::default()
+    }
+}
 
 impl Run for Parse {
     type Output = Result<Ast, Error>;
@@ -47,8 +56,8 @@ impl Run for Parse {
 struct Check(Rc<Ast>, Rc<CheckEnv>);
 
 impl Check {
-    fn new(ast: Rc<Ast>, env: Rc<CheckEnv>) -> Cached<Check> {
-        Cached::new(Self(ast, env))
+    fn new(ast: Rc<Ast>, env: Rc<CheckEnv>) -> HashMapStorage<Intermediate<Check>> {
+        HashMapStorage::new(Intermediate::new(Self(ast, env)))
     }
 }
 
@@ -62,12 +71,12 @@ impl Run for Check {
 
 /// fn execute(ast: Rc<Ast>, env: Rc<Env>) -> Result<i64, Error>
 ///   depends on: Execute(subtree, _)
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq)]
 struct Execute(Rc<Ast>, Rc<ExecEnv>);
 
 impl Execute {
-    fn new(ast: Rc<Ast>, env: Rc<ExecEnv>) -> Cached<Execute> {
-        Cached::new(Self(ast, env))
+    fn new(ast: Rc<Ast>, env: Rc<ExecEnv>) -> BTreeMapStorage<Intermediate<Execute>> {
+        BTreeMapStorage::new(Intermediate::new(Self(ast, env)))
     }
 }
 
@@ -81,9 +90,13 @@ impl Run for Execute {
 
 /// fn execute_all() -> Result<i64, Error>
 ///   depends on: Check(..), Execute(..)
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 struct ExecuteAll;
-const EXECUTE_ALL: Cached<ExecuteAll> = Cached::new(ExecuteAll);
+impl ExecuteAll {
+    fn new() -> SingletonStorage<Intermediate<ExecuteAll>> {
+        Default::default()
+    }
+}
 
 impl Run for ExecuteAll {
     type Output = Result<i64, Error>;
@@ -105,7 +118,7 @@ enum Error {
     NameNotDefined(String),
 }
 
-#[derive(Debug, Hash, PartialEq, Eq, Clone)]
+#[derive(Debug, Hash, PartialEq, Eq, Clone, PartialOrd, Ord)]
 enum Ast {
     Var {
         name: String,
@@ -131,7 +144,7 @@ type ExecEnv = BTreeMap<String, i64>;
 /// add: '(' '+' expr expr ')'
 /// let: '(' 'let' variable expr expr ')'
 fn parse_program(db: &mut DbHandle<impl Computation>) -> Result<Ast, Error> {
-    let program: &String = db.get(INPUT);
+    let program: &String = db.get(Input::new());
     let (ast, rest) = parse_value(program)?;
 
     if !rest.trim().is_empty() {
@@ -296,7 +309,7 @@ fn execute(
 /// check pass, followed by the entire execute pass which resembles how a typical compiler is
 /// structured.
 fn execute_all(db: &mut DbHandle<impl Computation>) -> Result<i64, Error> {
-    let ast = db.get(PARSE).clone()?;
+    let ast = db.get(Parse::new()).clone()?;
     let ast = Rc::new(ast);
 
     db.get(Check::new(ast.clone(), Rc::new(CheckEnv::new())))
@@ -306,7 +319,7 @@ fn execute_all(db: &mut DbHandle<impl Computation>) -> Result<i64, Error> {
 }
 
 fn set_input(db: &mut Db<Compiler>, source_program: &str) {
-    db.update_input(INPUT, source_program.to_string());
+    db.update_input(Input::new(), source_program.to_string());
 }
 
 #[test]
@@ -314,30 +327,30 @@ fn basic_programs() {
     let mut db = Db::<Compiler>::new();
 
     set_input(&mut db, "42");
-    let result = db.get(EXECUTE_ALL).clone();
+    let result = db.get(ExecuteAll::new()).clone();
     assert_eq!(result, Ok(42));
 
     set_input(&mut db, "(+ 42 58)");
-    let result = db.get(EXECUTE_ALL).clone();
+    let result = db.get(ExecuteAll::new()).clone();
     assert_eq!(result, Ok(100));
 
     set_input(&mut db, "(let foo 42 (+ 58 foo))");
-    let result = db.get(EXECUTE_ALL).clone();
+    let result = db.get(ExecuteAll::new()).clone();
     assert_eq!(result, Ok(100));
 
     set_input(&mut db, "(let foo 42 (+ 58 foo)) foo");
-    let result = db.get(EXECUTE_ALL).clone();
+    let result = db.get(ExecuteAll::new()).clone();
     assert_eq!(
         result,
         Err(Error::InputEmptyOrUnparsedOutput(" foo".to_string()))
     );
 
     set_input(&mut db, "(let foo 42 (+ foo bar))");
-    let result = db.get(EXECUTE_ALL).clone();
+    let result = db.get(ExecuteAll::new()).clone();
     assert_eq!(result, Err(Error::NameNotDefined("bar".to_string())));
 
     set_input(&mut db, "(let foo 42 (let bar 8 (+ foo bar)))");
-    let result = db.get(EXECUTE_ALL).clone();
+    let result = db.get(ExecuteAll::new()).clone();
     assert_eq!(result, Ok(50));
 }
 
@@ -346,12 +359,12 @@ fn cached() {
     let mut db = Db::<Compiler>::new();
 
     set_input(&mut db, "(+ 42 58)");
-    let result = db.get(EXECUTE_ALL).clone();
+    let result = db.get(ExecuteAll::new()).clone();
     assert_eq!(result, Ok(100));
 
     // Update the input, aiming to re-use a previous computation
     set_input(&mut db, "42");
-    let ast = db.get(PARSE).clone().unwrap();
+    let ast = db.get(Parse::new()).clone().unwrap();
     assert_eq!(ast, Ast::Int(42));
 
     // Although the input has changed, we cache each intermediate result and shouldn't
