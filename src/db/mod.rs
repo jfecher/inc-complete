@@ -9,6 +9,7 @@ pub use handle::DbHandle;
 
 const START_VERSION: u32 = 1;
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Db<C: Computation> {
     cells: DiGraph<CellData, ()>,
     version: u32,
