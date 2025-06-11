@@ -20,16 +20,16 @@ the format is not currently stable across releases of inc-complete.
 
 ## Current Features
 
-[x] Load from disk
+- [x] Load from disk
   - Manual save and load to disk to restart from where the previous program run left off.
   - Just serialize and deserialize the central `Db` object.
 
 ## Planned Features & Roadmap
 
-[ ] Thread-safe with helpers to query multiple dependencies and update them on separate threads
+- [ ] Thread-safe with helpers to query multiple dependencies and update them on separate threads
 - Safety Checks:
-  [ ] Cyclical dependency check
-  [ ] Manually invoked garbage collection for old cached computation results
+  - [ ] Cyclical dependency check
+  - [ ] Manually invoked garbage collection for old cached computation results
 
 ## Quick Start
 
