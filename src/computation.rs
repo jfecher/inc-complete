@@ -8,6 +8,9 @@ mod singleton;
 mod hashmapped;
 mod btreemapped;
 
+#[macro_use]
+mod macros;
+
 pub use input::{ Input, OutputTypeForInput };
 pub use intermediate::{ Intermediate, Run };
 pub use singleton::SingletonStorage;

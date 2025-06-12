@@ -3,7 +3,7 @@ use std::{
     rc::Rc,
 };
 
-use crate::{Intermediate, SingletonStorage, HashMapStorage, BTreeMapStorage, Computation, Db, DbHandle, OutputTypeForInput, Run};
+use inc_complete::{Computation, Db, DbHandle, define_input, define_intermediate};
 
 /// Test a somewhat more complex case with nested computations
 /// There is a lot of cloning required to create these keys. This can be
@@ -11,100 +11,31 @@ use crate::{Intermediate, SingletonStorage, HashMapStorage, BTreeMapStorage, Com
 /// in `Rc` to reduce the cost a bit. This still requires cloning when - e.g.
 /// the argument is mutated such as with the environment parameters.
 type Compiler = (
-    SingletonStorage<crate::Input<Input>>,
-    SingletonStorage<Intermediate<Parse>>,
-    HashMapStorage<Intermediate<Check>>,
-    // Ensure BTreeMapStorage is tested as well
-    BTreeMapStorage<Intermediate<Execute>>,
-    SingletonStorage<Intermediate<ExecuteAll>>,
+    Input,
+    Parse,
+    Check,
+    Execute,
+    ExecuteAll,
 );
 
-/// Input: String
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
-struct Input;
-impl Input {
-    fn new() -> SingletonStorage<crate::Input<Input>> {
-        Default::default()
-    }
-}
+// Input: String
+define_input!(Input, get_input, String);
 
-impl OutputTypeForInput for Input {
-    type Output = String;
-}
+// fn parse(db) -> Result<Ast, Error>
+//   depends on: Input
+define_intermediate!(Parse, parse, cloned Result<Ast, Error>, parse_program);
 
-/// fn parse() -> Result<Ast, Error>
-///   depends on: Input
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
-struct Parse;
-impl Parse {
-    fn new() -> SingletonStorage<Intermediate<Parse>> {
-        Default::default()
-    }
-}
+// fn check(ast: Rc<Ast>, env: Rc<CheckEnv>, db) -> Result<(), Error>
+//   depends on: Check(subtree, _)
+define_intermediate!(Check { &ast: Rc<Ast>, &env: Rc<CheckEnv> }, check, cloned Result<(), Error>, check_impl);
 
-impl Run for Parse {
-    type Output = Result<Ast, Error>;
+// fn execute(ast: Rc<Ast>, env: Rc<ExecEnv>, db) -> Result<i64, Error>
+//   depends on: Execute(subtree, _)
+define_intermediate!(Execute { &ast: Rc<Ast>, &env: Rc<ExecEnv> }, execute, cloned Result<i64, Error>, execute_impl);
 
-    fn run(&self, handle: &mut DbHandle<impl crate::Computation>) -> Self::Output {
-        parse_program(handle)
-    }
-}
-
-/// fn check(ast: Rc<Ast>, env: Rc<CheckEnv>) -> Result<(), Error>
-///   depends on: Check(subtree, _)
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-struct Check(Rc<Ast>, Rc<CheckEnv>);
-
-impl Check {
-    fn new(ast: Rc<Ast>, env: Rc<CheckEnv>) -> HashMapStorage<Intermediate<Check>> {
-        HashMapStorage::new(Intermediate::new(Self(ast, env)))
-    }
-}
-
-impl Run for Check {
-    type Output = Result<(), Error>;
-
-    fn run(&self, handle: &mut DbHandle<impl Computation>) -> Self::Output {
-        check(&self.0, &self.1, handle)
-    }
-}
-
-/// fn execute(ast: Rc<Ast>, env: Rc<Env>) -> Result<i64, Error>
-///   depends on: Execute(subtree, _)
-#[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq)]
-struct Execute(Rc<Ast>, Rc<ExecEnv>);
-
-impl Execute {
-    fn new(ast: Rc<Ast>, env: Rc<ExecEnv>) -> BTreeMapStorage<Intermediate<Execute>> {
-        BTreeMapStorage::new(Intermediate::new(Self(ast, env)))
-    }
-}
-
-impl Run for Execute {
-    type Output = Result<i64, Error>;
-
-    fn run(&self, handle: &mut DbHandle<impl Computation>) -> Self::Output {
-        execute(&self.0, &self.1, handle)
-    }
-}
-
-/// fn execute_all() -> Result<i64, Error>
-///   depends on: Check(..), Execute(..)
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
-struct ExecuteAll;
-impl ExecuteAll {
-    fn new() -> SingletonStorage<Intermediate<ExecuteAll>> {
-        Default::default()
-    }
-}
-
-impl Run for ExecuteAll {
-    type Output = Result<i64, Error>;
-
-    fn run(&self, handle: &mut DbHandle<impl Computation>) -> Self::Output {
-        execute_all(handle)
-    }
-}
+// fn execute_all(db) -> Result<i64, Error>
+//   depends on: Check(..), Execute(..)
+define_intermediate!(ExecuteAll, execute_all, cloned Result<i64, Error>, execute_all_impl);
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
 enum Error {
@@ -144,7 +75,7 @@ type ExecEnv = BTreeMap<String, i64>;
 /// add: '(' '+' expr expr ')'
 /// let: '(' 'let' variable expr expr ')'
 fn parse_program(db: &mut DbHandle<impl Computation>) -> Result<Ast, Error> {
-    let program: &String = db.get(Input::new());
+    let program: &String = get_input(db);
     let (ast, rest) = parse_value(program)?;
 
     if !rest.trim().is_empty() {
@@ -252,7 +183,7 @@ fn next_whitespace_or_rparen_index(text: &str) -> usize {
 }
 
 /// Ensure all variables are defined or return an Error
-fn check(ast: &Ast, env: &Rc<CheckEnv>, db: &mut DbHandle<impl Computation>) -> Result<(), Error> {
+fn check_impl(ast: &Ast, env: &Rc<CheckEnv>, db: &mut DbHandle<impl Computation>) -> Result<(), Error> {
     match ast {
         Ast::Var { name } => {
             if env.contains(name) {
@@ -263,20 +194,20 @@ fn check(ast: &Ast, env: &Rc<CheckEnv>, db: &mut DbHandle<impl Computation>) -> 
         }
         Ast::Int(_) => Ok(()),
         Ast::Add(lhs, rhs) => {
-            db.get(Check::new(lhs.clone(), env.clone())).clone()?;
-            db.get(Check::new(rhs.clone(), env.clone())).clone()
+            check(lhs.clone(), env.clone(), db)?;
+            check(rhs.clone(), env.clone(), db)
         }
         Ast::Let { name, rhs, body } => {
-            db.get(Check::new(rhs.clone(), env.clone())).clone()?;
+            check(rhs.clone(), env.clone(), db)?;
 
             let mut new_env = env.as_ref().clone();
             new_env.insert(name.clone());
-            db.get(Check::new(body.clone(), Rc::new(new_env))).clone()
+            check(body.clone(), Rc::new(new_env), db)
         }
     }
 }
 
-fn execute(
+fn execute_impl(
     ast: &Rc<Ast>,
     env: &Rc<ExecEnv>,
     db: &mut DbHandle<impl Computation>,
@@ -288,16 +219,16 @@ fn execute(
         }
         Ast::Int(x) => Ok(*x),
         Ast::Add(lhs, rhs) => {
-            let lhs = db.get(Execute::new(lhs.clone(), env.clone())).clone()?;
-            let rhs = db.get(Execute::new(rhs.clone(), env.clone())).clone()?;
+            let lhs = execute(lhs.clone(), env.clone(), db)?;
+            let rhs = execute(rhs.clone(), env.clone(), db)?;
             Ok(lhs + rhs)
         }
         Ast::Let { name, rhs, body } => {
-            let rhs = db.get(Execute::new(rhs.clone(), env.clone())).clone()?;
+            let rhs = execute(rhs.clone(), env.clone(), db)?;
 
             let mut new_env = env.as_ref().clone();
             new_env.insert(name.clone(), rhs);
-            db.get(Execute::new(body.clone(), Rc::new(new_env))).clone()
+            execute(body.clone(), Rc::new(new_env), db)
         }
     }
 }
@@ -308,74 +239,76 @@ fn execute(
 /// at each recursive step is still wasteful. So a separate rule is used here to run the entire
 /// check pass, followed by the entire execute pass which resembles how a typical compiler is
 /// structured.
-fn execute_all(db: &mut DbHandle<impl Computation>) -> Result<i64, Error> {
-    let ast = db.get(Parse::new()).clone()?;
+fn execute_all_impl(db: &mut DbHandle<impl Computation>) -> Result<i64, Error> {
+    let ast = parse(db)?;
     let ast = Rc::new(ast);
-
-    db.get(Check::new(ast.clone(), Rc::new(CheckEnv::new())))
-        .clone()?;
-    db.get(Execute::new(ast.clone(), Rc::new(ExecEnv::new())))
-        .clone()
+    check(ast.clone(), Rc::new(CheckEnv::new()), db)?;
+    execute(ast.clone(), Rc::new(ExecEnv::new()), db)
 }
 
 fn set_input(db: &mut Db<Compiler>, source_program: &str) {
-    db.update_input(Input::new(), source_program.to_string());
+    db.update_input(Input::default(), source_program.to_string());
 }
 
-#[test]
-fn basic_programs() {
-    let mut db = Db::<Compiler>::new();
+mod compiler {
+    use inc_complete::Db;
+    use crate::*;
 
-    set_input(&mut db, "42");
-    let result = db.get(ExecuteAll::new()).clone();
-    assert_eq!(result, Ok(42));
+    #[test]
+    fn basic_programs() {
+        let mut db = Db::<Compiler>::new();
 
-    set_input(&mut db, "(+ 42 58)");
-    let result = db.get(ExecuteAll::new()).clone();
-    assert_eq!(result, Ok(100));
+        set_input(&mut db, "42");
+        let result = execute_all_db(&mut db);
+        assert_eq!(result, Ok(42));
 
-    set_input(&mut db, "(let foo 42 (+ 58 foo))");
-    let result = db.get(ExecuteAll::new()).clone();
-    assert_eq!(result, Ok(100));
+        set_input(&mut db, "(+ 42 58)");
+        let result = execute_all_db(&mut db);
+        assert_eq!(result, Ok(100));
 
-    set_input(&mut db, "(let foo 42 (+ 58 foo)) foo");
-    let result = db.get(ExecuteAll::new()).clone();
-    assert_eq!(
-        result,
-        Err(Error::InputEmptyOrUnparsedOutput(" foo".to_string()))
-    );
+        set_input(&mut db, "(let foo 42 (+ 58 foo))");
+        let result = execute_all_db(&mut db);
+        assert_eq!(result, Ok(100));
 
-    set_input(&mut db, "(let foo 42 (+ foo bar))");
-    let result = db.get(ExecuteAll::new()).clone();
-    assert_eq!(result, Err(Error::NameNotDefined("bar".to_string())));
+        set_input(&mut db, "(let foo 42 (+ 58 foo)) foo");
+        let result = execute_all_db(&mut db);
+        assert_eq!(
+            result,
+            Err(Error::InputEmptyOrUnparsedOutput(" foo".to_string()))
+        );
 
-    set_input(&mut db, "(let foo 42 (let bar 8 (+ foo bar)))");
-    let result = db.get(ExecuteAll::new()).clone();
-    assert_eq!(result, Ok(50));
-}
+        set_input(&mut db, "(let foo 42 (+ foo bar))");
+        let result = execute_all_db(&mut db);
+        assert_eq!(result, Err(Error::NameNotDefined("bar".to_string())));
 
-#[test]
-fn cached() {
-    let mut db = Db::<Compiler>::new();
+        set_input(&mut db, "(let foo 42 (let bar 8 (+ foo bar)))");
+        let result = execute_all_db(&mut db);
+        assert_eq!(result, Ok(50));
+    }
 
-    set_input(&mut db, "(+ 42 58)");
-    let result = db.get(ExecuteAll::new()).clone();
-    assert_eq!(result, Ok(100));
+    #[test]
+    fn cached() {
+        let mut db = Db::<Compiler>::new();
 
-    // Update the input, aiming to re-use a previous computation
-    set_input(&mut db, "42");
-    let ast = db.get(Parse::new()).clone().unwrap();
-    assert_eq!(ast, Ast::Int(42));
+        set_input(&mut db, "(+ 42 58)");
+        let result = execute_all_db(&mut db);
+        assert_eq!(result, Ok(100));
 
-    // Although the input has changed, we cache each intermediate result and shouldn't
-    // need to re-run execute (but execute_all will re-run to produce an Ast that we
-    // can check is cached).
-    //
-    // Note that since the execution environment is cached as well if that had changed
-    // then we would still need to re-run this. This is desired for Asts containing Var
-    // nodes but not desired for this simple Int node. If we wanted to, we could fix this
-    // by adding new rules for ExecuteInt and CheckInt which don't require an environment.
-    let ast = Rc::new(ast);
-    assert!(!db.is_stale(&Check::new(ast.clone(), Default::default())));
-    assert!(!db.is_stale(&Execute::new(ast, Default::default())));
+        // Update the input, aiming to re-use a previous computation
+        set_input(&mut db, "42");
+        let ast = parse_db(&mut db).unwrap();
+        assert_eq!(ast, Ast::Int(42));
+
+        // Although the input has changed, we cache each intermediate result and shouldn't
+        // need to re-run execute (but execute_all will re-run to produce an Ast that we
+        // can check is cached).
+        //
+        // Note that since the execution environment is cached as well if that had changed
+        // then we would still need to re-run this. This is desired for Asts containing Var
+        // nodes but not desired for this simple Int node. If we wanted to, we could fix this
+        // by adding new rules for ExecuteInt and CheckInt which don't require an environment.
+        let ast = Rc::new(ast);
+        assert!(!db.is_stale(&Check(ast.clone(), Default::default())));
+        assert!(!db.is_stale(&Execute(ast, Default::default())));
+    }
 }

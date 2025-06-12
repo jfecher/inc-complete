@@ -360,6 +360,7 @@
 //! These fields often correspond to parameters of the function being modeled, in
 //! this case the integer input to `fibonacci`.
 mod cell;
+#[macro_use]
 mod computation;
 mod db;
 mod interned;
