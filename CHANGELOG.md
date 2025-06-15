@@ -1,3 +1,7 @@
+# 0.3.3
+
+- Macros now define items as `pub(crate)`
+
 # 0.3.2
 
 - Fixed `paste!` macro dependency preventing use of `define_input!` and `define_intermediate!`

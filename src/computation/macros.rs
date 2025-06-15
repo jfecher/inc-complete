@@ -44,27 +44,27 @@ macro_rules! define_intermediate {
 
         $crate::paste::paste! {
             #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-            struct [<$type_name Internal>] { $( $( $field_name : $field_type ),* )? }
+            pub(crate) struct [<$type_name Internal>] { $( $( $field_name : $field_type ),* )? }
 
-            type $type_name = $crate::HashMapStorage<$crate::Intermediate<[<$type_name Internal>]>>;
+            pub(crate) type $type_name = $crate::HashMapStorage<$crate::Intermediate<[<$type_name Internal>]>>;
 
             // Constructor function
             #[allow(non_snake_case)]
             #[allow(unused)]
-            fn $type_name($( $( $field_name : $field_type, )* )?) -> $type_name {
+            pub(crate) fn $type_name($( $( $field_name : $field_type, )* )?) -> $type_name {
                 $crate::HashMapStorage::new($crate::Intermediate::new([<$type_name Internal>] { $( $( $field_name ),* )? }))
             }
 
             // Query function with DbHandle
             #[allow(unused)]
-            fn $get_function_name<'db>($( $( $field_name : $field_type, )* )? db: &'db mut $crate::DbHandle<impl $crate::Computation>) -> $($output_ref)? $output_type {
+            pub(crate) fn $get_function_name<'db>($( $( $field_name : $field_type, )* )? db: &'db mut $crate::DbHandle<impl $crate::Computation>) -> $($output_ref)? $output_type {
                 $clone_function(db.get($type_name ( $( $( $field_name ),* )? )))
             }
 
             // TODO: Should create a trait to abstract over DbHandle and Db
             // Query function with Db
             #[allow(unused)]
-            fn [<$get_function_name _db>]<'db>($( $( $field_name : $field_type, )* )? db: &'db mut $crate::Db<impl $crate::Computation>) -> $($output_ref)? $output_type {
+            pub(crate) fn [<$get_function_name _db>]<'db>($( $( $field_name : $field_type, )* )? db: &'db mut $crate::Db<impl $crate::Computation>) -> $($output_ref)? $output_type {
                 $clone_function(db.get($type_name ( $( $( $field_name ),* )? )))
             }
 
@@ -120,20 +120,20 @@ macro_rules! define_input {
 
         $crate::paste::paste! {
             #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
-            pub struct [<$type_name Internal>] { $( $( $field_name : $field_type ),* )? }
+            pub(crate) struct [<$type_name Internal>] { $( $( $field_name : $field_type ),* )? }
 
-            pub type $type_name = $crate::HashMapStorage<$crate::Input<[<$type_name Internal>]>>;
+            pub(crate) type $type_name = $crate::HashMapStorage<$crate::Input<[<$type_name Internal>]>>;
 
             // Constructor function
             #[allow(non_snake_case)]
             #[allow(unused)]
-            fn $type_name($( $( $field_name : $field_type, )* )?) -> $type_name {
+            pub(crate) fn $type_name($( $( $field_name : $field_type, )* )?) -> $type_name {
                 $crate::HashMapStorage::new($crate::Input::new([<$type_name Internal>] { $( $( $field_name ),* )? }))
             }
 
             // Query function with DbHandle
             #[allow(unused)]
-            fn $get_function_name<'db>($( $( $field_name : $field_type, )* )? db: &'db mut $crate::DbHandle<impl $crate::Computation>) -> $($output_ref)* $output_type {
+            pub(crate) fn $get_function_name<'db>($( $( $field_name : $field_type, )* )? db: &'db mut $crate::DbHandle<impl $crate::Computation>) -> $($output_ref)* $output_type {
                 let result = db.get($type_name ($( $( $field_name ),* )? ));
                 $clone_function(result)
             }
@@ -141,7 +141,7 @@ macro_rules! define_input {
             // TODO: Should create a trait to abstract over DbHandle and Db
             // Query function with Db
             #[allow(unused)]
-            fn [<$get_function_name _db>]<'db>($( $( $field_name : $field_type, )* )? db: &'db mut $crate::Db<impl $crate::Computation>) -> $($output_ref)? $output_type {
+            pub(crate) fn [<$get_function_name _db>]<'db>($( $( $field_name : $field_type, )* )? db: &'db mut $crate::Db<impl $crate::Computation>) -> $($output_ref)? $output_type {
                 let result = db.get($type_name ($( $( $field_name ),* )? ));
                 $clone_function(result)
             }
