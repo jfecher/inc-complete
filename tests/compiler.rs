@@ -10,13 +10,7 @@ use inc_complete::{Computation, Db, DbHandle, define_input, define_intermediate}
 /// improved in the future with interning. For now we manually wrap arguments
 /// in `Rc` to reduce the cost a bit. This still requires cloning when - e.g.
 /// the argument is mutated such as with the environment parameters.
-type Compiler = (
-    Input,
-    Parse,
-    Check,
-    Execute,
-    ExecuteAll,
-);
+type Compiler = (Input, Parse, Check, Execute, ExecuteAll);
 
 // Input: String
 define_input!(Input, get_input, String);
@@ -183,7 +177,11 @@ fn next_whitespace_or_rparen_index(text: &str) -> usize {
 }
 
 /// Ensure all variables are defined or return an Error
-fn check_impl(ast: &Ast, env: &Rc<CheckEnv>, db: &mut DbHandle<impl Computation>) -> Result<(), Error> {
+fn check_impl(
+    ast: &Ast,
+    env: &Rc<CheckEnv>,
+    db: &mut DbHandle<impl Computation>,
+) -> Result<(), Error> {
     match ast {
         Ast::Var { name } => {
             if env.contains(name) {
@@ -251,8 +249,8 @@ fn set_input(db: &mut Db<Compiler>, source_program: &str) {
 }
 
 mod compiler {
-    use inc_complete::Db;
     use crate::*;
+    use inc_complete::Db;
 
     #[test]
     fn basic_programs() {

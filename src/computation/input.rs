@@ -35,18 +35,26 @@ impl<T: OutputTypeForInput + 'static> Computation for Input<T> {
     }
 
     fn input_to_cell(_: &Self, _: &Self::Storage) -> Option<Cell> {
-        panic!("Input used without a storage type wrapper - try wrapping your type with `HashMapStorage<Input<T>>`")
+        panic!(
+            "Input used without a storage type wrapper - try wrapping your type with `HashMapStorage<Input<T>>`"
+        )
     }
 
     fn get_function_and_output(_: Cell, _: &Self::Storage) -> (&Self, Option<&Self::Output>) {
-        panic!("Input used without a storage type wrapper - try wrapping your type with `HashMapStorage<Input<T>>`")
+        panic!(
+            "Input used without a storage type wrapper - try wrapping your type with `HashMapStorage<Input<T>>`"
+        )
     }
 
     fn set_output(_: Cell, _: Self::Output, _: &mut Self::Storage) {
-        panic!("Input used without a storage type wrapper - try wrapping your type with `HashMapStorage<Input<T>>`")
+        panic!(
+            "Input used without a storage type wrapper - try wrapping your type with `HashMapStorage<Input<T>>`"
+        )
     }
 
     fn insert_new_cell(_: Cell, _: Self, _: &mut Self::Storage) {
-        panic!("Input used without a storage type wrapper - try wrapping your type with `HashMapStorage<Input<T>>`")
+        panic!(
+            "Input used without a storage type wrapper - try wrapping your type with `HashMapStorage<Input<T>>`"
+        )
     }
 }

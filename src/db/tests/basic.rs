@@ -1,11 +1,11 @@
-use crate::SingletonStorage;
-use crate::Intermediate;
 use crate::Computation;
 use crate::Db;
 use crate::DbHandle;
 use crate::Input;
+use crate::Intermediate;
 use crate::OutputTypeForInput;
 use crate::Run;
+use crate::SingletonStorage;
 use crate::db::START_VERSION;
 
 // Emulate this spreadsheet:
@@ -36,7 +36,6 @@ impl A3 {
         SingletonStorage::new(Intermediate::new(A3))
     }
 }
-
 
 type Spreadsheet = (
     SingletonStorage<Input<A1>>,

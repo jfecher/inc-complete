@@ -12,8 +12,13 @@ pub struct SingletonStorage<T>(T);
 impl<T> SingletonStorage<T> {
     pub fn new(value: T) -> Self {
         let bytes = std::mem::size_of::<T>();
-        assert_eq!(bytes, 0, "SingletonStorage only supports 0-sized types but `{}` is `{}` bytes large",
-            std::any::type_name::<T>(), bytes);
+        assert_eq!(
+            bytes,
+            0,
+            "SingletonStorage only supports 0-sized types but `{}` is `{}` bytes large",
+            std::any::type_name::<T>(),
+            bytes
+        );
         Self(value)
     }
 }

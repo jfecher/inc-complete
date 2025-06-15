@@ -1,4 +1,6 @@
-use crate::{Intermediate, SingletonStorage, Db, DbHandle, Input, OutputTypeForInput, Run, db::START_VERSION};
+use crate::{
+    Db, DbHandle, Input, Intermediate, OutputTypeForInput, Run, SingletonStorage, db::START_VERSION,
+};
 
 type SafeDiv = (
     SingletonStorage<Input<Numerator>>,

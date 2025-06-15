@@ -233,7 +233,7 @@
 //!     // Now we can use `b1(handle)`
 //! }
 //! ```
-//! 
+//!
 //! With that out of the way though, we can finally create our `Db`, set the initial values for our
 //! inputs, and run our program:
 //!
@@ -332,7 +332,7 @@
 //! ```
 //! use inc_complete::{ Intermediate, Run, DbHandle, Computation, HashMapStorage };
 //!
-//! // a fibonacci function with cached sub-results 
+//! // a fibonacci function with cached sub-results
 //! #[derive(Clone, PartialEq, Eq, Hash)]
 //! struct Fibonacci { x: u32 }
 //!
@@ -365,6 +365,11 @@ mod computation;
 mod db;
 mod interned;
 
+pub use ::paste;
+
 pub use cell::Cell;
-pub use computation::{Intermediate, Computation, Input, OutputTypeForInput, Run, HashMapStorage, BTreeMapStorage, SingletonStorage};
+pub use computation::{
+    BTreeMapStorage, Computation, HashMapStorage, Input, Intermediate, OutputTypeForInput, Run,
+    SingletonStorage,
+};
 pub use db::{Db, DbHandle};

@@ -33,21 +33,26 @@ where
     }
 
     fn input_to_cell(_: &Self, _: &Self::Storage) -> Option<Cell> {
-        panic!("Intermediate used without a storage type wrapper - try wrapping your type with `HashMapStorage<Intermediate<T>>`")
+        panic!(
+            "Intermediate used without a storage type wrapper - try wrapping your type with `HashMapStorage<Intermediate<T>>`"
+        )
     }
 
-    fn get_function_and_output(
-        _: Cell,
-        _: &Self::Storage,
-    ) -> (&Self, Option<&Self::Output>) {
-        panic!("Intermediate used without a storage type wrapper - try wrapping your type with `HashMapStorage<Intermediate<T>>`")
+    fn get_function_and_output(_: Cell, _: &Self::Storage) -> (&Self, Option<&Self::Output>) {
+        panic!(
+            "Intermediate used without a storage type wrapper - try wrapping your type with `HashMapStorage<Intermediate<T>>`"
+        )
     }
 
     fn set_output(_: Cell, _: Self::Output, _: &mut Self::Storage) {
-        panic!("Intermediate used without a storage type wrapper - try wrapping your type with `HashMapStorage<Intermediate<T>>`")
+        panic!(
+            "Intermediate used without a storage type wrapper - try wrapping your type with `HashMapStorage<Intermediate<T>>`"
+        )
     }
 
     fn insert_new_cell(_: Cell, _: Self, _: &mut Self::Storage) {
-        panic!("Intermediate used without a storage type wrapper - try wrapping your type with `HashMapStorage<Intermediate<T>>`")
+        panic!(
+            "Intermediate used without a storage type wrapper - try wrapping your type with `HashMapStorage<Intermediate<T>>`"
+        )
     }
 }

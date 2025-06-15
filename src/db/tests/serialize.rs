@@ -1,10 +1,9 @@
 use crate::{Computation, DbHandle, HashMapStorage, Intermediate, Run};
 
-
-
-
 #[derive(Clone, PartialEq, Eq, Hash)]
-struct Fibonacci { x: u32 }
+struct Fibonacci {
+    x: u32,
+}
 
 impl Fibonacci {
     fn new(x: u32) -> HashMapStorage<Intermediate<Fibonacci>> {

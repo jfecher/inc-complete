@@ -1,21 +1,21 @@
 use crate::{Cell, Db, DbHandle};
 use std::any::{Any, TypeId};
 
-mod tuple_impls;
+mod btreemapped;
+mod hashmapped;
 mod input;
 mod intermediate;
 mod singleton;
-mod hashmapped;
-mod btreemapped;
+mod tuple_impls;
 
 #[macro_use]
 mod macros;
 
-pub use input::{ Input, OutputTypeForInput };
-pub use intermediate::{ Intermediate, Run };
-pub use singleton::SingletonStorage;
-pub use hashmapped::HashMapStorage;
 pub use btreemapped::BTreeMapStorage;
+pub use hashmapped::HashMapStorage;
+pub use input::{Input, OutputTypeForInput};
+pub use intermediate::{Intermediate, Run};
+pub use singleton::SingletonStorage;
 
 pub trait Computation: 'static + Sized + Clone {
     type Storage;
