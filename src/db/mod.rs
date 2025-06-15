@@ -37,12 +37,9 @@ impl<C: Computation> Db<C> {
     pub fn is_stale<Concrete: Computation>(&self, input: &Concrete) -> bool {
         // If the cell doesn't exist, it is definitely stale
         let Some(cell) = self.get_cell(input) else {
-            println!("{} is stale", std::any::type_name::<Concrete>());
             return true;
         };
-        let r = self.is_stale_cell(cell);
-        println!("{} is stale: {r}", std::any::type_name::<Concrete>());
-        r
+        self.is_stale_cell(cell)
     }
 
     /// True if a given cell is stale and needs to be re-computed.
@@ -50,7 +47,6 @@ impl<C: Computation> Db<C> {
     pub fn is_stale_cell(&self, cell: Cell) -> bool {
         let computation_id = self.cells[cell.index()].computation_id;
         if C::output_is_unset::<C>(cell, computation_id, computation_id, self) {
-            println!("output {} is unset", computation_id);
             return true;
         }
 
@@ -215,11 +211,6 @@ where
         self.update_cell(cell_id);
 
         let computation_id = self.cells[cell_id.index()].computation_id;
-        println!(
-            "get_with_cell get_storage_mut::<{}> with id {}",
-            std::any::type_name::<Concrete>(),
-            computation_id
-        );
         let container = C::get_storage_mut::<Concrete>(computation_id, self.storage_mut());
         Concrete::get_function_and_output(cell_id, container)
             .1

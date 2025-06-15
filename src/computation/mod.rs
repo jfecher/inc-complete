@@ -90,9 +90,7 @@ pub trait Computation: 'static + Sized + Clone {
         );
 
         let container = FullComputation::get_storage::<Self>(original_computation_id, db.storage());
-        let unset = Self::get_function_and_output(cell, container).1.is_none();
-        println!("{} output is unset: {unset}", std::any::type_name::<Self>());
-        unset
+        Self::get_function_and_output(cell, container).1.is_none()
     }
 
     /// Given a Cell, TypeId pair dispatch to the correct run function

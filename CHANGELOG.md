@@ -1,3 +1,7 @@
+# 0.3.4
+
+- Removed debug output
+
 # 0.3.3
 
 - Macros now define items as `pub(crate)`
