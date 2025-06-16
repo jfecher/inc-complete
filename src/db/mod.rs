@@ -1,5 +1,6 @@
 use crate::cell::CellData;
-use crate::{Cell, Computation};
+use crate::storage::{ComputationId, StorageFor, StorageForInput};
+use crate::{Cell, OutputType, Storage};
 use petgraph::graph::DiGraph;
 
 mod handle;
@@ -9,32 +10,31 @@ pub use handle::DbHandle;
 
 const START_VERSION: u32 = 1;
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct Db<C: Computation> {
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct Db<Storage> {
     cells: DiGraph<CellData, ()>,
     version: u32,
-    storage: C::Storage,
+    storage: Storage,
 }
 
-impl<C: Computation> Db<C>
-where
-    C::Storage: Default,
-{
+impl<Storage: Default> Db<Storage> {
     pub fn new() -> Self {
         Self {
             cells: DiGraph::default(),
             version: START_VERSION,
-            storage: Default::default(),
+            storage: Storage::default(),
         }
     }
 }
 
-impl<C: Computation> Db<C> {
+impl<S: Storage> Db<S> {
     /// True if a given input is stale and needs to be re-computed.
     /// Inputs which have never been computed are also considered stale.
     ///
     /// This does not actually re-compute the input.
-    pub fn is_stale<Concrete: Computation>(&self, input: &Concrete) -> bool {
+    pub fn is_stale<C: OutputType>(&self, input: &C) -> bool
+        where S: StorageFor<C>
+    {
         // If the cell doesn't exist, it is definitely stale
         let Some(cell) = self.get_cell(input) else {
             return true;
@@ -46,7 +46,7 @@ impl<C: Computation> Db<C> {
     /// This does not actually re-compute the input.
     pub fn is_stale_cell(&self, cell: Cell) -> bool {
         let computation_id = self.cells[cell.index()].computation_id;
-        if C::output_is_unset::<C>(cell, computation_id, computation_id, self) {
+        if self.storage.output_is_unset(cell, computation_id) {
             return true;
         }
 
@@ -62,25 +62,28 @@ impl<C: Computation> Db<C> {
         })
     }
 
-    /// Return the corresponding Cell for a given input, if it exists.
+    /// Return the corresponding Cell for a given computation, if it exists.
     ///
     /// This will not update any values.
-    pub fn get_cell<ConcreteC: Computation>(&self, input: &ConcreteC) -> Option<Cell> {
-        C::dispatch_input_to_cell(input, &self.storage)
+    pub fn get_cell<C: OutputType>(&self, computation: &C) -> Option<Cell>
+        where S: StorageFor<C>
+    {
+        self.storage.get_cell_for_computation(computation)
     }
 
-    pub fn get_or_insert_cell<ConcreteC>(&mut self, input: ConcreteC) -> Cell
+    pub fn get_or_insert_cell<C>(&mut self, input: C) -> Cell
     where
-        ConcreteC: Computation,
+        C: OutputType + ComputationId,
+        S: StorageFor<C>,
     {
-        if let Some(cell) = C::dispatch_input_to_cell(&input, &self.storage) {
+        if let Some(cell) = self.get_cell(&input) {
             cell
         } else {
-            let computation_id = C::computation_id_of::<ConcreteC>();
+            let computation_id = C::computation_id();
 
             let new_id = self.cells.add_node(CellData::new(computation_id));
             let cell = Cell::new(new_id);
-            C::dispatch_insert_new_cell(cell, input, &mut self.storage);
+            self.storage.insert_new_cell(cell, input);
             cell
         }
     }
@@ -89,32 +92,21 @@ impl<C: Computation> Db<C> {
     ///
     /// May panic in Debug mode if the input is not an input - ie. it has at least 1 dependency.
     /// Note that this step is skipped when compiling in Release mode.
-    pub fn update_input<ConcreteC: Computation>(
+    pub fn update_input<C: OutputType>(
         &mut self,
-        input: ConcreteC,
-        new_value: ConcreteC::Output,
+        input: C,
+        new_value: C::Output,
     ) where
-        ConcreteC: std::fmt::Debug,
-        C::Output: Eq,
+        C: std::fmt::Debug + ComputationId,
+        S: StorageForInput<C>,
     {
-        let debug = format!("{input:?}");
         let cell_id = self.get_or_insert_cell(input);
         debug_assert!(
             self.is_input(cell_id),
-            "`{debug:?}` is not an input - inputs must have 0 dependencies",
+            "`update_input` given a non-input value. Inputs must have 0 dependencies",
         );
 
-        // need to split dispatch_run into dispatch_run and dispatch_update
-        let cell = &self.cells[cell_id.index()];
-        let computation_id = cell.computation_id;
-
-        let changed = C::dispatch_update_output::<ConcreteC, C>(
-            cell_id,
-            computation_id,
-            computation_id,
-            new_value,
-            self,
-        );
+        let changed = self.storage.update_output(cell_id, new_value);
         let cell = &mut self.cells[cell_id.index()];
 
         if changed {
@@ -130,45 +122,39 @@ impl<C: Computation> Db<C> {
         self.cells.neighbors(cell.index()).count() == 0
     }
 
-    pub(crate) fn handle(&mut self, cell: Cell) -> DbHandle<C> {
+    fn handle(&mut self, cell: Cell) -> DbHandle<S> {
         DbHandle::new(self, cell)
     }
 
-    pub fn storage(&self) -> &C::Storage {
+    pub fn storage(&self) -> &S {
         &self.storage
     }
 
-    pub fn storage_mut(&mut self) -> &mut C::Storage {
+    pub fn storage_mut(&mut self) -> &mut S {
         &mut self.storage
     }
 
     #[cfg(test)]
-    pub(crate) fn unwrap_cell_value<Concrete: Computation>(&self, input: &Concrete) -> &CellData
+    pub(crate) fn unwrap_cell_value<C: OutputType>(&self, input: &C) -> &CellData
     where
-        Concrete: std::fmt::Debug,
+        C: std::fmt::Debug,
+        S: StorageFor<C>,
     {
         let cell = self
             .get_cell(input)
             .unwrap_or_else(|| panic!("unwrap_cell_value: Expected cell for `{input:?}` to exist"));
         &self.cells[cell.index()]
     }
-}
 
-impl<C: Computation + Clone> Db<C>
-where
-    C::Output: Eq,
-{
     /// Similar to `update_input` but runs the compute function
     /// instead of accepting a given value. This also will not update
     /// `self.version`
-    fn run_compute_function(&mut self, cell_id: Cell)
-    where
-        C::Output: Eq,
-    {
+    fn run_compute_function(&mut self, cell_id: Cell) {
         let cell = &self.cells[cell_id.index()];
         let computation_id = cell.computation_id;
 
-        let changed = C::dispatch_run::<C>(cell_id, computation_id, computation_id, self);
+        let mut handle = self.handle(cell_id);
+        let changed = S::run_computation(&mut handle, cell_id, computation_id);
 
         let cell = &mut self.cells[cell_id.index()];
         cell.last_verified_version = self.version;
@@ -198,22 +184,23 @@ where
     /// necessary.
     ///
     /// This function can panic if the dynamic type of the value returned by `compute.run(..)` is not `T`.
-    pub fn get<Concrete: Computation>(&mut self, compute: Concrete) -> &Concrete::Output {
+    pub fn get<C: OutputType + ComputationId>(&mut self, compute: C) -> &C::Output
+        where S: StorageFor<C>
+    {
         let cell_id = self.get_or_insert_cell(compute);
-        self.get_with_cell::<Concrete>(cell_id)
+        self.get_with_cell::<C>(cell_id)
     }
 
     /// Retrieves the up to date value for the given cell, re-running any dependencies as
     /// necessary.
     ///
     /// This function can panic if the dynamic type of the value returned by `compute.run(..)` is not `T`.
-    pub fn get_with_cell<Concrete: Computation>(&mut self, cell_id: Cell) -> &Concrete::Output {
+    pub fn get_with_cell<Concrete: OutputType>(&mut self, cell_id: Cell) -> &Concrete::Output
+        where S: StorageFor<Concrete>
+    {
         self.update_cell(cell_id);
 
-        let computation_id = self.cells[cell_id.index()].computation_id;
-        let container = C::get_storage_mut::<Concrete>(computation_id, self.storage_mut());
-        Concrete::get_function_and_output(cell_id, container)
-            .1
+        self.storage.get_output(cell_id)
             .expect("cell result should have been computed already")
     }
 }

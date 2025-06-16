@@ -1,4 +1,4 @@
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub struct Cell(petgraph::graph::NodeIndex);
 
 impl Cell {
@@ -11,7 +11,7 @@ impl Cell {
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub(crate) struct CellData {
     pub(crate) computation_id: u32,
     pub(crate) last_updated_version: u32,

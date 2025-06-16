@@ -11,9 +11,9 @@ repository = "https://github.com/jfecher/inc-complete"
 documentation = "https://docs.rs/inc-complete"
 
 [dependencies]
-petgraph = "0.8"
-serde = { version = "1.0", features = ["derive", "rc"], optional = true }
+petgraph = { version = "0.8", features = ["serde-1"] }
+serde = { version = "1.0", features = ["derive", "rc"] }
 paste = "1.0.15"
 
-[features]
-serde = ["dep:serde", "petgraph/serde-1"]
+[dev-dependencies]
+serde_json = "1.0"

@@ -1,7 +1,7 @@
 use crate::Computation;
 use crate::Db;
 use crate::DbHandle;
-use crate::Input;
+use crate::OutputType;
 use crate::Intermediate;
 use crate::OutputTypeForInput;
 use crate::Run;
@@ -16,8 +16,8 @@ use crate::db::START_VERSION;
 #[derive(Clone, Debug, Default)]
 struct A1;
 impl A1 {
-    fn new() -> SingletonStorage<Input<A1>> {
-        SingletonStorage::new(Input::new(A1))
+    fn new() -> SingletonStorage<OutputType<A1>> {
+        SingletonStorage::new(OutputType::new(A1))
     }
 }
 
@@ -38,7 +38,7 @@ impl A3 {
 }
 
 type Spreadsheet = (
-    SingletonStorage<Input<A1>>,
+    SingletonStorage<OutputType<A1>>,
     SingletonStorage<Intermediate<A2>>,
     SingletonStorage<Intermediate<A3>>,
 );

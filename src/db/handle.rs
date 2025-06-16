@@ -1,19 +1,19 @@
 use petgraph::visit::EdgeRef;
 
-use crate::{Cell, Computation, Db};
+use crate::{storage::{ComputationId, StorageFor}, Cell, Db, OutputType, Storage};
 
 /// A handle to the database during some operation.
 ///
 /// This wraps calls to the Db so that any `get` calls
 /// will be automatically registered as dependencies of
 /// the current operation.
-pub struct DbHandle<'db, C: Computation> {
-    db: &'db mut Db<C>,
+pub struct DbHandle<'db, S> {
+    db: &'db mut Db<S>,
     current_operation: Cell,
 }
 
-impl<'db, C: Computation> DbHandle<'db, C> {
-    pub(crate) fn new(db: &'db mut Db<C>, current_operation: Cell) -> Self {
+impl<'db, S> DbHandle<'db, S> {
+    pub(crate) fn new(db: &'db mut Db<S>, current_operation: Cell) -> Self {
         // We're re-running a cell so remove any past dependencies
         let edges = db
             .cells
@@ -29,11 +29,12 @@ impl<'db, C: Computation> DbHandle<'db, C> {
             current_operation,
         }
     }
+}
 
-    pub fn get<Concrete: Computation>(&mut self, compute: Concrete) -> &Concrete::Output
+impl<'db, S: Storage> DbHandle<'db, S> {
+    pub fn get<C: OutputType + ComputationId>(&mut self, compute: C) -> &C::Output
     where
-        C::Output: Eq,
-        C: Clone,
+        S: StorageFor<C>,
     {
         // Register the dependency
         let dependency = self.db.get_or_insert_cell(compute);
@@ -42,6 +43,6 @@ impl<'db, C: Computation> DbHandle<'db, C> {
             .update_edge(self.current_operation.index(), dependency.index(), ());
 
         // Fetch the current value of the dependency
-        self.db.get_with_cell::<Concrete>(dependency)
+        self.db.get_with_cell(dependency)
     }
 }

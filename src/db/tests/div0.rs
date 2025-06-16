@@ -1,10 +1,10 @@
 use crate::{
-    Db, DbHandle, Input, Intermediate, OutputTypeForInput, Run, SingletonStorage, db::START_VERSION,
+    Db, DbHandle, OutputType, Intermediate, OutputTypeForInput, Run, SingletonStorage, db::START_VERSION,
 };
 
 type SafeDiv = (
-    SingletonStorage<Input<Numerator>>,
-    SingletonStorage<Input<Denominator>>,
+    SingletonStorage<OutputType<Numerator>>,
+    SingletonStorage<OutputType<Denominator>>,
     SingletonStorage<Intermediate<Division>>,
     SingletonStorage<Intermediate<DenominatorIs0>>,
     SingletonStorage<Intermediate<Result>>,
@@ -13,7 +13,7 @@ type SafeDiv = (
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 struct Numerator;
 impl Numerator {
-    fn new() -> SingletonStorage<Input<Numerator>> {
+    fn new() -> SingletonStorage<OutputType<Numerator>> {
         Default::default()
     }
 }
@@ -21,7 +21,7 @@ impl Numerator {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 struct Denominator;
 impl Denominator {
-    fn new() -> SingletonStorage<Input<Denominator>> {
+    fn new() -> SingletonStorage<OutputType<Denominator>> {
         Default::default()
     }
 }

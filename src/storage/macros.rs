@@ -30,20 +30,24 @@
 #[macro_export]
 macro_rules! define_intermediate {
     // No `cloned` on output_type
-    ( $type_name:ident $( { $($fields:tt)* } )? ,
+    ( $( #$attrs:tt )?
+      $type_name:ident $( { $($fields:tt)* } )? ,
       $get_function_name:ident, $output_type:ty, $impl_function:expr) => {
-        define_intermediate!(@inner $type_name $( { $( $fields )* } )?, $get_function_name, $output_type, $impl_function; (|x|x); &'db);
+        define_intermediate!(@inner $(#$attrs)? $type_name $( { $( $fields )* } )?, $get_function_name, $output_type, $impl_function; (|x|x); &'db);
     };
     // `cloned` on output_type
-    ( $type_name:ident $( { $($fields:tt)* } )? ,
+    ( $( #$attrs:tt )?
+      $type_name:ident $( { $($fields:tt)* } )? ,
       $get_function_name:ident, cloned $output_type:ty, $impl_function:expr) => {
-        define_intermediate!(@inner $type_name $( { $($fields)* } )?, $get_function_name, $output_type, $impl_function; Clone::clone;);
+        define_intermediate!(@inner $(#$attrs)? $type_name $( { $($fields)* } )?, $get_function_name, $output_type, $impl_function; Clone::clone;);
     };
-    (@inner $type_name:ident $( { $( $($(@$if_ref:tt)? &)? $field_name:ident : $field_type:ty),* } )? ,
+    (@inner $( #$attrs:tt )?
+      $type_name:ident $( { $( $($(@$if_ref:tt)? &)? $field_name:ident : $field_type:ty),* } )? ,
       $get_function_name:ident, $output_type:ty, $impl_function:expr; $clone_function:expr ; $($output_ref:tt)* ) => {
 
         $crate::paste::paste! {
             #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+            $(#$attrs)?
             pub(crate) struct [<$type_name Internal>] { $( $( $field_name : $field_type ),* )? }
 
             pub(crate) type $type_name = $crate::HashMapStorage<$crate::Intermediate<[<$type_name Internal>]>>;
@@ -105,21 +109,25 @@ macro_rules! define_intermediate {
 #[macro_export]
 macro_rules! define_input {
     // No `cloned` on output_type
-    ( $type_name:ident $( { $($fields:tt)* } )? ,
+    ( $( #$attrs:tt )?
+      $type_name:ident $( { $($fields:tt)* } )? ,
       $get_function_name:ident, $output_type:ty) => {
-        define_input!($type_name $( { $($fields)* } )?, $get_function_name, $output_type; (|x|x); &'db);
+        define_input!(@inner $(#$attrs)? $type_name $( { $($fields)* } )?, $get_function_name, $output_type; (|x|x); &'db);
     };
     // `cloned` on output_type
-    ( $type_name:ident $( { $($fields:tt)* } )? ,
+    ( $( #$attrs:tt )?
+      $type_name:ident $( { $($fields:tt)* } )? ,
       $get_function_name:ident, cloned $output_type:ty) => {
-        define_input!($type_name $( { $($fields)* } )?, $get_function_name, $output_type; Clone::clone;);
+        define_input!(@inner $(#$attrs)? $type_name $( { $($fields)* } )?, $get_function_name, $output_type; Clone::clone;);
     };
 
-    ( $type_name:ident $( { $( $field_name:ident : $field_type:ty),* } )? ,
+    ( @inner $( #$attrs:tt )?
+      $type_name:ident $( { $( $field_name:ident : $field_type:ty),* } )? ,
       $get_function_name:ident, $output_type:ty ; $clone_function:expr ; $($output_ref:tt)* ) => {
 
         $crate::paste::paste! {
             #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
+            $( #$attrs )?
             pub(crate) struct [<$type_name Internal>] { $( $( $field_name : $field_type ),* )? }
 
             pub(crate) type $type_name = $crate::HashMapStorage<$crate::Input<[<$type_name Internal>]>>;

@@ -361,15 +361,12 @@
 //! this case the integer input to `fibonacci`.
 mod cell;
 #[macro_use]
-mod computation;
+pub mod storage;
 mod db;
 mod interned;
 
 pub use ::paste;
 
 pub use cell::Cell;
-pub use computation::{
-    BTreeMapStorage, Computation, HashMapStorage, Input, Intermediate, OutputTypeForInput, Run,
-    SingletonStorage,
-};
 pub use db::{Db, DbHandle};
+pub use storage::{ Storage, StorageFor, OutputType, Run };
