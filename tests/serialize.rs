@@ -1,12 +1,28 @@
 use inc_complete::{
-    DbHandle, StorageFor, define_input, define_intermediate, impl_storage,
+    Db, DbHandle, StorageFor, define_input, define_intermediate, impl_storage,
     storage::{BTreeMapStorage, HashMapStorage},
 };
 use serde::{Deserialize, Serialize};
 
-type Db = inc_complete::Db<Storage>;
-type DbWithoutAsPlusBs = inc_complete::Db<StorageWithoutAsPlusBs>;
+#[derive(Default, Serialize, Deserialize)]
+struct StorageWithoutAsPlusBs {
+    strings: BTreeMapStorage<Strings>,
+    count_as: BTreeMapStorage<CountAs>,
+    count_bs: BTreeMapStorage<CountBs>,
+}
 
+impl_storage!(StorageWithoutAsPlusBs,
+    strings: Strings,
+    count_as: CountAs,
+    count_bs: CountBs,
+);
+
+/// In a real program this would be a future version of the same struct but
+/// we need both at the same time in the program so we have to define both.
+///
+/// Note how the new field `as_plus_bs` is annotated with `serde(default)`.
+/// This is all we need to deserialize `StorageWithoutAsPlusBs` as `Storage`
+/// for json at least - this may depend on your exact serialization format.
 #[derive(Default, Serialize, Deserialize)]
 struct Storage {
     strings: BTreeMapStorage<Strings>,
@@ -24,19 +40,7 @@ impl_storage!(Storage,
     as_plus_bs: AsPlusBs,
 );
 
-#[derive(Default, Serialize, Deserialize)]
-struct StorageWithoutAsPlusBs {
-    strings: BTreeMapStorage<Strings>,
-    count_as: BTreeMapStorage<CountAs>,
-    count_bs: BTreeMapStorage<CountBs>,
-}
-
-impl_storage!(StorageWithoutAsPlusBs,
-    strings: Strings,
-    count_as: CountAs,
-    count_bs: CountBs,
-);
-
+// `Storage | StorageWithoutAsPlusBs` is syntax to implement `Run` for multiple storage types.
 define_input!(0, Strings -> String, Storage | StorageWithoutAsPlusBs);
 #[derive(Debug, Serialize, Deserialize, Clone, PartialOrd, Ord, PartialEq, Eq)]
 struct Strings {
@@ -94,7 +98,7 @@ where
 /// Test basic serialization and deserialization with no changes to Db structure
 #[test]
 fn still_cached_after_serialize() {
-    let mut db = Db::new();
+    let mut db = Db::<Storage>::new();
     let half = "50%".to_string();
     db.update_input(
         Strings { name: half.clone() },
@@ -104,7 +108,7 @@ fn still_cached_after_serialize() {
     assert_eq!(*db.get(CountAs { name: half.clone() }), 10);
 
     let serialized = serde_json::to_string(&db).unwrap();
-    let mut new_db: Db = serde_json::from_str(&serialized).unwrap();
+    let mut new_db: Db<Storage> = serde_json::from_str(&serialized).unwrap();
 
     assert!(!new_db.is_stale(&CountAs { name: half.clone() }));
     assert!(new_db.is_stale(&AsPlusBs { name: half.clone() }));
@@ -118,12 +122,16 @@ fn still_cached_after_serialize() {
 /// Emulate a case where a user wants to add a new cached computation but also
 /// remain backward-compatible with existing serialization.
 ///
-/// Currently, inc-complete only supports backwards compatibility when computations
-/// are added to the end of the Db's computation tuple generic argument. When
-/// computations are added to the middle existing computation ids are changed.
+/// The internal structure of the `Db` is completely storage-agnostic, it only
+/// stores computation ids and version metadata. So backwards compatibility
+/// is entirely dependent on the storage type used. In this example, we already
+/// made sure `Storage` is backwards-compatible with `StorageWithoutAsPlusBs` when
+/// defining the types, so we should be able to deserialize the former as the later.
+/// The new field containing `AsPlusBs` isn't part of `StorageWithoutAsPlusBs`, so
+/// we expect it to be empty in `Storage`.
 #[test]
 fn extend_preexisting_db_from_end() {
-    let mut db = DbWithoutAsPlusBs::new();
+    let mut db = Db::<StorageWithoutAsPlusBs>::new();
     let half = "50%".to_string();
     db.update_input(
         Strings { name: half.clone() },
@@ -137,8 +145,8 @@ fn extend_preexisting_db_from_end() {
 
     let serialized = serde_json::to_string(&db).unwrap();
 
-    // Deserializing a Db here, not a DbWithoutAsPlusBs!
-    let mut extended_db: Db = serde_json::from_str(&serialized).unwrap();
+    // Deserializing a Db<Storage> here, not a Db<StorageWithoutAsPlusBs>!
+    let mut extended_db: Db<Storage> = serde_json::from_str(&serialized).unwrap();
 
     assert!(!extended_db.is_stale(&CountAs { name: half.clone() }));
     assert!(!extended_db.is_stale(&CountBs { name: half.clone() }));

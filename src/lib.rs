@@ -298,13 +298,20 @@
 //!
 //! These fields often correspond to parameters of the function being modeled, in
 //! this case the integer input to `fibonacci`.
+//!
+//! ## Serialization
+//!
+//! Serialization can be done by serializing the `Db<S>` object. All cached computations
+//! are stored in the provided storage type `S` so it is up to users to decide how they
+//! want to serialize this storage. As a starting point, it is recommended to tag a field
+//! with `#[serde(default)]` when a new field is added to keep serialization backwards-compatible
+//! when deserializing previous versions of `S`. See the source file `tests/serialize.rs`
+//! as an example of this.
 mod cell;
 #[macro_use]
 pub mod storage;
 mod db;
 mod interned;
-
-pub use ::paste;
 
 pub use cell::Cell;
 pub use db::{Db, DbHandle};

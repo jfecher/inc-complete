@@ -1,6 +1,6 @@
 [package]
 name = "inc-complete"
-version = "0.3.4"
+version = "0.4.0"
 edition = "2024"
 authors = ["Jake Fecher <jfecher11@gmail.com>"]
 readme = "README.md"
@@ -13,7 +13,6 @@ documentation = "https://docs.rs/inc-complete"
 [dependencies]
 petgraph = { version = "0.8", features = ["serde-1"] }
 serde = { version = "1.0", features = ["derive", "rc"] }
-paste = "1.0.15"
 
 [dev-dependencies]
 serde_json = "1.0"
