@@ -43,7 +43,8 @@ impl<S: Storage> Db<S> {
     ///
     /// This does not actually re-compute the input.
     pub fn is_stale<C: OutputType>(&self, input: &C) -> bool
-        where S: StorageFor<C>
+    where
+        S: StorageFor<C>,
     {
         // If the cell doesn't exist, it is definitely stale
         let Some(cell) = self.get_cell(input) else {
@@ -76,7 +77,8 @@ impl<S: Storage> Db<S> {
     ///
     /// This will not update any values.
     pub fn get_cell<C: OutputType>(&self, computation: &C) -> Option<Cell>
-        where S: StorageFor<C>
+    where
+        S: StorageFor<C>,
     {
         self.storage.get_cell_for_computation(computation)
     }
@@ -102,11 +104,8 @@ impl<S: Storage> Db<S> {
     ///
     /// May panic in Debug mode if the input is not an input - ie. it has at least 1 dependency.
     /// Note that this step is skipped when compiling in Release mode.
-    pub fn update_input<C: OutputType>(
-        &mut self,
-        input: C,
-        new_value: C::Output,
-    ) where
+    pub fn update_input<C: OutputType>(&mut self, input: C, new_value: C::Output)
+    where
         C: std::fmt::Debug + ComputationId,
         S: StorageFor<C>,
     {
@@ -187,7 +186,8 @@ impl<S: Storage> Db<S> {
     ///
     /// This function can panic if the dynamic type of the value returned by `compute.run(..)` is not `T`.
     pub fn get<C: OutputType + ComputationId>(&mut self, compute: C) -> &C::Output
-        where S: StorageFor<C>
+    where
+        S: StorageFor<C>,
     {
         let cell_id = self.get_or_insert_cell(compute);
         self.get_with_cell::<C>(cell_id)
@@ -198,11 +198,13 @@ impl<S: Storage> Db<S> {
     ///
     /// This function can panic if the dynamic type of the value returned by `compute.run(..)` is not `T`.
     pub fn get_with_cell<Concrete: OutputType>(&mut self, cell_id: Cell) -> &Concrete::Output
-        where S: StorageFor<Concrete>
+    where
+        S: StorageFor<Concrete>,
     {
         self.update_cell(cell_id);
 
-        self.storage.get_output(cell_id)
+        self.storage
+            .get_output(cell_id)
             .expect("cell result should have been computed already")
     }
 }

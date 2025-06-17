@@ -1,6 +1,9 @@
 use petgraph::visit::EdgeRef;
 
-use crate::{storage::{ComputationId, StorageFor}, Cell, Db, OutputType, Storage};
+use crate::{
+    Cell, Db, OutputType, Storage,
+    storage::{ComputationId, StorageFor},
+};
 
 /// A handle to the database during some operation.
 ///

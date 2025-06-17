@@ -2,8 +2,8 @@ use crate::{Cell, DbHandle};
 
 mod btreemapped;
 mod hashmapped;
-mod singleton;
 mod macros;
+mod singleton;
 mod tuple_impls;
 
 pub use btreemapped::BTreeMapStorage;

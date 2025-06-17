@@ -4,7 +4,7 @@ use std::{
 };
 
 use inc_complete::{
-    Db, DbHandle, Run, define_input, define_intermediate, impl_storage,
+    Db, DbHandle, define_input, define_intermediate, impl_storage,
     storage::{HashMapStorage, SingletonStorage},
 };
 

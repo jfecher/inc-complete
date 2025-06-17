@@ -1,5 +1,5 @@
 use inc_complete::{
-    DbHandle, Run, StorageFor, define_input, define_intermediate, impl_storage,
+    DbHandle, StorageFor, define_input, define_intermediate, impl_storage,
     storage::{BTreeMapStorage, HashMapStorage},
 };
 use serde::{Deserialize, Serialize};

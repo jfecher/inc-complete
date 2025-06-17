@@ -1,5 +1,5 @@
 use crate::{
-    Db, DbHandle, Run, db::START_VERSION, define_input, define_intermediate, impl_storage,
+    Db, DbHandle, db::START_VERSION, define_input, define_intermediate, impl_storage,
     storage::SingletonStorage,
 };
 

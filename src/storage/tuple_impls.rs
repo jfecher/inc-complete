@@ -14,8 +14,8 @@ macro_rules! impl_storage {
                 }
             }
 
-            fn run_computation(db: &mut DbHandle<Self>, cell: $crate::Cell, computation_id: u32) -> bool {
-                use $crate::StorageFor;
+            fn run_computation(db: &mut $crate::DbHandle<Self>, cell: $crate::Cell, computation_id: u32) -> bool {
+                use $crate::{ StorageFor, Run };
                 match computation_id {
                     $(
                         x if x == <$computation_type as $crate::ComputationId>::computation_id() => {
