@@ -3,7 +3,10 @@ use std::{
     rc::Rc,
 };
 
-use inc_complete::{define_input, define_intermediate, impl_storage_for_field, storage::{HashMapStorage, SingletonStorage}, Db, DbHandle, Run, Storage, StorageFor};
+use inc_complete::{
+    Db, DbHandle, Run, define_input, define_intermediate, impl_storage,
+    storage::{HashMapStorage, SingletonStorage},
+};
 
 /// Test a somewhat more complex case with nested computations
 /// There is a lot of cloning required to create these keys. This can be
@@ -19,73 +22,42 @@ struct Compiler {
     execute_all: SingletonStorage<ExecuteAll>,
 }
 
+impl_storage!(Compiler,
+    input: Input,
+    parse: Parse,
+    check: Check,
+    execute: Execute,
+    execute_all: ExecuteAll,
+);
+
 // Input: String
-define_input!(Input, String, 0);
-impl_storage_for_field!(Compiler, input, Input);
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Input;
+define_input!(0, Input -> String, Compiler);
 
 // fn parse(db) -> Result<Ast, Error>
 //   depends on: Input
-define_intermediate!(Parse, Result<Ast, Error>, 1, Compiler, parse_program);
-impl_storage_for_field!(Compiler, parse, Parse);
+#[derive(Clone)]
 struct Parse;
+define_intermediate!(1, Parse -> Result<Ast, Error>, Compiler, parse_program);
 
 // fn check(ast: Rc<Ast>, env: Rc<CheckEnv>, db) -> Result<(), Error>
 //   depends on: Check(subtree, _)
-define_intermediate!(Check, Result<(), Error>, 2, Compiler, check_impl);
-impl_storage_for_field!(Compiler, check, Check);
 #[derive(Clone, Hash, PartialEq, Eq)]
 struct Check(Rc<Ast>, Rc<CheckEnv>);
+define_intermediate!(2, Check -> Result<(), Error>, Compiler, check_impl);
 
 // fn execute(ast: Rc<Ast>, env: Rc<ExecEnv>, db) -> Result<i64, Error>
 //   depends on: Execute(subtree, _)
-define_intermediate!(Execute, Result<i64, Error>, 3, Compiler, execute_impl);
-impl_storage_for_field!(Compiler, execute, Execute);
 #[derive(Clone, Hash, PartialEq, Eq)]
 struct Execute(Rc<Ast>, Rc<ExecEnv>);
+define_intermediate!(3, Execute -> Result<i64, Error>, Compiler, execute_impl);
 
 // fn execute_all(db) -> Result<i64, Error>
 //   depends on: Check(..), Execute(..)
-define_intermediate!(ExecuteAll, Result<i64, Error>, 4, Compiler, execute_all_impl);
-impl_storage_for_field!(Compiler, execute_all, ExecuteAll);
+#[derive(Clone)]
 struct ExecuteAll;
-
-impl Storage for Compiler {
-    fn output_is_unset(&self, cell: inc_complete::Cell, computation_id: u32) -> bool {
-        match computation_id {
-            0 => self.input.get_output(cell).is_none(),
-            1 => self.parse.get_output(cell).is_none(),
-            2 => self.check.get_output(cell).is_none(),
-            3 => self.execute.get_output(cell).is_none(),
-            4 => self.execute_all.get_output(cell).is_none(),
-            _ => panic!(),
-        }
-    }
-
-    fn run_computation(db: &mut DbHandle<Self>, cell: inc_complete::Cell, computation_id: u32) -> bool {
-        match computation_id {
-            0 => panic!("Input has no computation, did you forget to call `update_input`?"),
-            1 => {
-                let new_value = Parse.run(db);
-                db.storage_mut().parse.update_output(cell, new_value)
-            }
-            2 => {
-                let new_value = db.storage().check.get_input(cell).clone().run(db);
-                db.storage_mut().check.update_output(cell, new_value)
-            }
-            3 => {
-                let new_value = db.storage().execute.get_input(cell).clone().run(db);
-                db.storage_mut().execute.update_output(cell, new_value)
-            }
-            4 => {
-                let new_value = ExecuteAll.run(db);
-                db.storage_mut().execute_all.update_output(cell, new_value)
-            }
-            _ => panic!(),
-        }
-    }
-}
+define_intermediate!(4, ExecuteAll -> Result<i64, Error>, Compiler, execute_all_impl);
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
 enum Error {
@@ -233,10 +205,7 @@ fn next_whitespace_or_rparen_index(text: &str) -> usize {
 }
 
 /// Ensure all variables are defined or return an Error
-fn check_impl(
-    check: &Check,
-    db: &mut DbHandle<Compiler>,
-) -> Result<(), Error> {
+fn check_impl(check: &Check, db: &mut DbHandle<Compiler>) -> Result<(), Error> {
     let ast = check.0.as_ref();
     let env = &check.1;
 
@@ -263,10 +232,7 @@ fn check_impl(
     }
 }
 
-fn execute_impl(
-    execute: &Execute,
-    db: &mut DbHandle<Compiler>,
-) -> Result<i64, Error> {
+fn execute_impl(execute: &Execute, db: &mut DbHandle<Compiler>) -> Result<i64, Error> {
     let ast = execute.0.as_ref();
     let env = &execute.1;
 
@@ -300,8 +266,10 @@ fn execute_impl(
 fn execute_all_impl(_: &ExecuteAll, db: &mut DbHandle<Compiler>) -> Result<i64, Error> {
     let ast = db.get(Parse).clone()?;
     let ast = Rc::new(ast);
-    db.get(Check(ast.clone(), Rc::new(CheckEnv::new()))).clone()?;
-    db.get(Execute(ast.clone(), Rc::new(ExecEnv::new()))).clone()
+    db.get(Check(ast.clone(), Rc::new(CheckEnv::new())))
+        .clone()?;
+    db.get(Execute(ast.clone(), Rc::new(ExecEnv::new())))
+        .clone()
 }
 
 fn set_input(db: &mut Db<Compiler>, source_program: &str) {

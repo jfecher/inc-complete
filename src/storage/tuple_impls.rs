@@ -1,6 +1,34 @@
 #[macro_export]
-macro_rules! impl_storage_for_field {
-    ($typ:ty, $field:ident, $computation_type:ty) => {
+macro_rules! impl_storage {
+    ($typ:ty, $( $field:ident : $computation_type:ty ),* $(, )? ) => {
+        impl $crate::Storage for $typ {
+            fn output_is_unset(&self, cell: $crate::Cell, computation_id: u32) -> bool {
+                use $crate::StorageFor;
+                match computation_id {
+                    $(
+                        x if x == <$computation_type as $crate::ComputationId>::computation_id() => {
+                            self.$field.get_output(cell).is_none()
+                        },
+                    )*
+                    id => panic!("Unknown computation id: {id}"),
+                }
+            }
+
+            fn run_computation(db: &mut DbHandle<Self>, cell: $crate::Cell, computation_id: u32) -> bool {
+                use $crate::StorageFor;
+                match computation_id {
+                    $(
+                        x if x == <$computation_type as $crate::ComputationId>::computation_id() => {
+                            let new_value = db.storage().$field.get_input(cell).clone().run(db);
+                            db.storage_mut().$field.update_output(cell, new_value)
+                        }
+                    )*
+                    id => panic!("Unknown computation id: {id}"),
+                }
+            }
+        }
+
+        $(
         impl $crate::StorageFor<$computation_type> for $typ {
             fn get_cell_for_computation(&self, key: &$computation_type) -> Option<$crate::Cell> {
                 self.$field.get_cell_for_computation(key)
@@ -21,6 +49,6 @@ macro_rules! impl_storage_for_field {
             fn update_output(&mut self, cell: $crate::Cell, new_value: <$computation_type as $crate::OutputType>::Output) -> bool {
                 self.$field.update_output(cell, new_value)
             }
-        }
+        })*
     };
 }

@@ -1,7 +1,9 @@
 use crate::{
-    db::START_VERSION, impl_storage_for_field, storage::SingletonStorage, Db, DbHandle, OutputType, Run
+    Db, DbHandle, Run, db::START_VERSION, define_input, define_intermediate, impl_storage,
+    storage::SingletonStorage,
 };
 
+#[derive(Default)]
 struct SafeDiv {
     numerator: SingletonStorage<Numerator>,
     denominator: SingletonStorage<Denominator>,
@@ -10,11 +12,13 @@ struct SafeDiv {
     result: SingletonStorage<Result>,
 }
 
-impl_storage_for_field!(SafeDiv, numerator, Numerator);
-impl_storage_for_field!(SafeDiv, denominator, Denominator);
-impl_storage_for_field!(SafeDiv, division, Division);
-impl_storage_for_field!(SafeDiv, denominator_is_0, DenominatorIs0);
-impl_storage_for_field!(SafeDiv, result, Result);
+impl_storage!(SafeDiv,
+    numerator: Numerator,
+    denominator: Denominator,
+    division: Division,
+    denominator_is_0: DenominatorIs0,
+    result: Result,
+);
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 struct Numerator;
@@ -31,34 +35,24 @@ struct DenominatorIs0;
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 struct Result;
 
-impl OutputType for Numerator { type Output = i32; }
+define_input!(0, Numerator -> i32, SafeDiv);
+define_input!(1, Denominator -> i32, SafeDiv);
 
-impl OutputType for Denominator { type Output = i32; }
+define_intermediate!(2, Division -> i32, SafeDiv, |_, handle: &mut DbHandle<SafeDiv>| {
+    *handle.get(Numerator) / *handle.get(Denominator)
+});
 
-impl OutputType for Division { type Output = i32; }
-impl Run<SafeDiv> for Division {
-    fn run(&self, handle: &mut DbHandle<SafeDiv>) -> Self::Output {
-        *handle.get(Numerator::new()) / *handle.get(Denominator::new())
+define_intermediate!(3, DenominatorIs0 -> bool, SafeDiv, |_, handle: &mut DbHandle<SafeDiv>| {
+    *handle.get(Denominator) == 0
+});
+
+define_intermediate!(4, Result -> i32, SafeDiv, |_, handle: &mut DbHandle<SafeDiv>| {
+    if *handle.get(DenominatorIs0) {
+        0
+    } else {
+        *handle.get(Division)
     }
-}
-
-impl OutputType for DenominatorIs0 { type Output = bool; }
-impl Run<SafeDiv> for DenominatorIs0 {
-    fn run(&self, handle: &mut DbHandle<DenominatorIs0>) -> Self::Output {
-        *handle.get(Denominator::new()) == 0
-    }
-}
-
-impl OutputType for Result { type Output = i32; }
-impl Run<SafeDiv> for Result {
-    fn run(&self, handle: &mut DbHandle<SafeDiv>) -> Self::Output {
-        if *handle.get(DenominatorIs0::new()) {
-            0
-        } else {
-            *handle.get(Division::new())
-        }
-    }
-}
+});
 
 type SafeDivDb = Db<SafeDiv>;
 
@@ -66,9 +60,9 @@ type SafeDivDb = Db<SafeDiv>;
 fn from_scratch() {
     // Run from scratch
     let mut db = SafeDivDb::new();
-    db.update_input(Numerator::new(), 6);
-    db.update_input(Denominator::new(), 0);
-    assert_eq!(0i32, *db.get(Result::new()));
+    db.update_input(Numerator, 6);
+    db.update_input(Denominator, 0);
+    assert_eq!(0i32, *db.get(Result));
 }
 
 #[test]
@@ -87,15 +81,15 @@ fn dynamic_dependency_not_run() {
     //
     // Start with Denominator = 2, then recompute with Denominator = 0
     let mut db = SafeDivDb::new();
-    db.update_input(Numerator::new(), 6);
-    db.update_input(Denominator::new(), 2);
+    db.update_input(Numerator, 6);
+    db.update_input(Denominator, 2);
 
     assert_eq!(db.version, START_VERSION + 2);
 
     // 6 / 2
-    assert_eq!(3i32, *db.get(Result::new()));
+    assert_eq!(3i32, *db.get(Result));
 
-    db.update_input(Denominator::new(), 0);
+    db.update_input(Denominator, 0);
     assert_eq!(db.version, START_VERSION + 3);
 
     // Although Division was previously a dependency of Result,
@@ -104,7 +98,7 @@ fn dynamic_dependency_not_run() {
     // If we did recalculate `Division` we would get a divide by zero error.
     //
     // Shouldn't get a divide by zero here
-    assert_eq!(0i32, *db.get(Result::new()));
+    assert_eq!(0i32, *db.get(Result));
 }
 
 /// Test that a dynamic dependency - such as Division for Result - is no longer
@@ -117,19 +111,19 @@ fn dynamic_dependency_not_run() {
 #[test]
 fn dynamic_dependency_removed() {
     let mut db = SafeDivDb::new();
-    db.update_input(Numerator::new(), 6);
-    db.update_input(Denominator::new(), 2);
+    db.update_input(Numerator, 6);
+    db.update_input(Denominator, 2);
 
     // Compute with non-zero denominator so that Division is registered as a dependency
-    assert_eq!(*db.get(Result::new()), 3);
+    assert_eq!(*db.get(Result), 3);
     let divide_changed_version = db.version;
 
     // Re-run with Denominator = 0
-    db.update_input(Denominator::new(), 0);
-    assert_eq!(*db.get(Result::new()), 0);
+    db.update_input(Denominator, 0);
+    assert_eq!(*db.get(Result), 0);
 
     let divide0_version = db.version;
-    let result_cell = db.unwrap_cell_value(&Result::new());
+    let result_cell = db.unwrap_cell_value(&Result);
     let result_last_verified = result_cell.last_verified_version;
     let result_last_updated = result_cell.last_updated_version;
 
@@ -141,15 +135,15 @@ fn dynamic_dependency_removed() {
     // Now update the Numerator and test that Result is not re-computed.
     // If Division were still a dependency, updating Numerator would trigger
     // Division to be updated, which would also update Result.
-    db.update_input(Numerator::new(), 12);
-    assert!(*db.get(DenominatorIs0::new()));
+    db.update_input(Numerator, 12);
+    assert!(*db.get(DenominatorIs0));
 
     // DenominatorIs0 was just verified, ensure that Result does not need to be recomputed.
     // If Division were still a dependency, we'd expect Result to be stale.
-    assert!(!db.is_stale(&Result::new()));
+    assert!(!db.is_stale(&Result));
 
     // Division shouldn't have been updated or verified in a while
-    let division_cell = db.unwrap_cell_value(&Division::new());
+    let division_cell = db.unwrap_cell_value(&Division);
     let division_last_verified = division_cell.last_verified_version;
     let division_last_updated = division_cell.last_updated_version;
     assert_eq!(division_last_verified, divide_changed_version);

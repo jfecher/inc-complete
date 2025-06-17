@@ -1,4 +1,7 @@
-use inc_complete::{define_input, define_intermediate, impl_storage_for_field, storage::{BTreeMapStorage, HashMapStorage}, ComputationId, DbHandle, OutputType, Run, StorageFor};
+use inc_complete::{
+    DbHandle, Run, StorageFor, define_input, define_intermediate, impl_storage,
+    storage::{BTreeMapStorage, HashMapStorage},
+};
 use serde::{Deserialize, Serialize};
 
 type Db = inc_complete::Db<Storage>;
@@ -14,6 +17,13 @@ struct Storage {
     as_plus_bs: HashMapStorage<AsPlusBs>,
 }
 
+impl_storage!(Storage,
+    strings: Strings,
+    count_as: CountAs,
+    count_bs: CountBs,
+    as_plus_bs: AsPlusBs,
+);
+
 #[derive(Default, Serialize, Deserialize)]
 struct StorageWithoutAsPlusBs {
     strings: BTreeMapStorage<Strings>,
@@ -21,141 +31,59 @@ struct StorageWithoutAsPlusBs {
     count_bs: BTreeMapStorage<CountBs>,
 }
 
-impl inc_complete::Storage for Storage {
-    fn output_is_unset(&self, cell: inc_complete::Cell, computation_id: u32) -> bool {
-        match computation_id {
-            0 => self.strings.get_output(cell).is_none(),
-            1 => self.count_as.get_output(cell).is_none(),
-            2 => self.count_bs.get_output(cell).is_none(),
-            3 => self.as_plus_bs.get_output(cell).is_none(),
-            _ => panic!(),
-        }
-    }
+impl_storage!(StorageWithoutAsPlusBs,
+    strings: Strings,
+    count_as: CountAs,
+    count_bs: CountBs,
+);
 
-    fn run_computation(db: &mut DbHandle<Self>, cell: inc_complete::Cell, computation_id: u32) -> bool {
-        match computation_id {
-            0 => panic!("Strings has no computation, did you forget to call `update_input`?"),
-            1 => {
-                let new_value = db.storage().count_as.get_input(cell).clone().run(db);
-                db.storage_mut().count_as.update_output(cell, new_value)
-            }
-            2 => {
-                let new_value = db.storage().count_bs.get_input(cell).clone().run(db);
-                db.storage_mut().count_bs.update_output(cell, new_value)
-            }
-            3 => {
-                let new_value = db.storage().as_plus_bs.get_input(cell).clone().run(db);
-                db.storage_mut().as_plus_bs.update_output(cell, new_value)
-            }
-            _ => panic!(),
-        }
-    }
-}
-
-impl inc_complete::Storage for StorageWithoutAsPlusBs {
-    fn output_is_unset(&self, cell: inc_complete::Cell, computation_id: u32) -> bool {
-        match computation_id {
-            0 => self.strings.get_output(cell).is_none(),
-            1 => self.count_as.get_output(cell).is_none(),
-            2 => self.count_bs.get_output(cell).is_none(),
-            _ => panic!(),
-        }
-    }
-
-    fn run_computation(db: &mut DbHandle<Self>, cell: inc_complete::Cell, computation_id: u32) -> bool {
-        match computation_id {
-            0 => panic!("Strings has no computation, did you forget to call `update_input`?"),
-            1 => {
-                let new_value = db.storage().count_as.get_input(cell).clone().run(db);
-                db.storage_mut().count_as.update_output(cell, new_value)
-            }
-            2 => {
-                let new_value = db.storage().count_bs.get_input(cell).clone().run(db);
-                db.storage_mut().count_bs.update_output(cell, new_value)
-            }
-            _ => panic!(),
-        }
-    }
-}
-
-
-impl_storage_for_field!(Storage, strings, Strings);
-impl_storage_for_field!(StorageWithoutAsPlusBs, strings, Strings);
-define_input!(Strings, String, 0);
+define_input!(0, Strings -> String, Storage | StorageWithoutAsPlusBs);
 #[derive(Debug, Serialize, Deserialize, Clone, PartialOrd, Ord, PartialEq, Eq)]
-struct Strings { name: String }
+struct Strings {
+    name: String,
+}
 
-impl_storage_for_field!(Storage, count_as, CountAs);
-impl_storage_for_field!(StorageWithoutAsPlusBs, count_as, CountAs);
+define_intermediate!(1, CountAs -> usize, Storage | StorageWithoutAsPlusBs, count_as_impl);
 #[derive(Serialize, Deserialize, Clone, PartialOrd, Ord, PartialEq, Eq)]
-struct CountAs { name: String }
-
-impl OutputType for CountAs {
-    type Output = usize;
+struct CountAs {
+    name: String,
 }
 
-impl ComputationId for CountAs {
-    fn computation_id() -> u32 {
-        1
-    }
-}
-
-impl Run<Storage> for CountAs {
-    fn run(&self, db: &mut DbHandle<Storage>) -> Self::Output {
-        count_as_impl(&self.name, db)
-    }
-}
-
-impl Run<StorageWithoutAsPlusBs> for CountAs {
-    fn run(&self, db: &mut DbHandle<StorageWithoutAsPlusBs>) -> Self::Output {
-        count_as_impl(&self.name, db)
-    }
-}
-
-impl_storage_for_field!(Storage, count_bs, CountBs);
-impl_storage_for_field!(StorageWithoutAsPlusBs, count_bs, CountBs);
+define_intermediate!(2, CountBs -> usize, Storage | StorageWithoutAsPlusBs, count_bs_impl);
 #[derive(Serialize, Deserialize, Clone, PartialOrd, Ord, PartialEq, Eq)]
-struct CountBs { name: String }
-
-impl OutputType for CountBs {
-    type Output = usize;
+struct CountBs {
+    name: String,
 }
 
-impl ComputationId for CountBs {
-    fn computation_id() -> u32 {
-        2
-    }
-}
-
-impl Run<Storage> for CountBs {
-    fn run(&self, db: &mut DbHandle<Storage>) -> Self::Output {
-        count_bs_impl(&self.name, db)
-    }
-}
-
-impl Run<StorageWithoutAsPlusBs> for CountBs {
-    fn run(&self, db: &mut DbHandle<StorageWithoutAsPlusBs>) -> Self::Output {
-        count_bs_impl(&self.name, db)
-    }
-}
-
-impl_storage_for_field!(Storage, as_plus_bs, AsPlusBs);
-define_intermediate!(AsPlusBs, usize, 3, Storage, as_plus_bs_impl);
+define_intermediate!(3, AsPlusBs -> usize, Storage | StorageWithoutAsPlusBs, as_plus_bs_impl);
 #[derive(Serialize, Deserialize, Clone, Hash, PartialEq, Eq)]
-struct AsPlusBs { name: String }
+struct AsPlusBs {
+    name: String,
+}
 
-fn count_as_impl<S: inc_complete::Storage + StorageFor<Strings>>(name: &String, db: &mut DbHandle<S>) -> usize {
-    let input = db.get(Strings { name: name.clone() });
+fn count_as_impl<S: inc_complete::Storage + StorageFor<Strings>>(
+    this: &CountAs,
+    db: &mut DbHandle<S>,
+) -> usize {
+    let input = db.get(Strings {
+        name: this.name.clone(),
+    });
     input.chars().filter(|c| *c == 'a').count()
 }
 
-fn count_bs_impl<S: inc_complete::Storage + StorageFor<Strings>>(name: &String, db: &mut DbHandle<S>) -> usize {
-    let input = db.get(Strings { name: name.clone() });
+fn count_bs_impl<S: inc_complete::Storage + StorageFor<Strings>>(
+    this: &CountBs,
+    db: &mut DbHandle<S>,
+) -> usize {
+    let input = db.get(Strings {
+        name: this.name.clone(),
+    });
     input.chars().filter(|c| *c == 'b').count()
 }
 
-fn as_plus_bs_impl<S>(params: &AsPlusBs, db: &mut DbHandle<S>) -> usize where
-    S: inc_complete::Storage + StorageFor<Strings> + StorageFor<CountAs> + StorageFor<CountBs>
+fn as_plus_bs_impl<S>(params: &AsPlusBs, db: &mut DbHandle<S>) -> usize
+where
+    S: inc_complete::Storage + StorageFor<Strings> + StorageFor<CountAs> + StorageFor<CountBs>,
 {
     let name = &params.name;
     let a_count = *db.get(CountAs { name: name.clone() });
@@ -168,7 +96,10 @@ fn as_plus_bs_impl<S>(params: &AsPlusBs, db: &mut DbHandle<S>) -> usize where
 fn still_cached_after_serialize() {
     let mut db = Db::new();
     let half = "50%".to_string();
-    db.update_input(Strings { name: half.clone() }, "ababababab ababababab".to_string());
+    db.update_input(
+        Strings { name: half.clone() },
+        "ababababab ababababab".to_string(),
+    );
 
     assert_eq!(*db.get(CountAs { name: half.clone() }), 10);
 
@@ -194,7 +125,10 @@ fn still_cached_after_serialize() {
 fn extend_preexisting_db_from_end() {
     let mut db = DbWithoutAsPlusBs::new();
     let half = "50%".to_string();
-    db.update_input(Strings { name: half.clone() }, "ababababab ababababab".to_string());
+    db.update_input(
+        Strings { name: half.clone() },
+        "ababababab ababababab".to_string(),
+    );
 
     // Ensure everything in the original database is filled so we can assert
     // the new item in the new_db later on is not
