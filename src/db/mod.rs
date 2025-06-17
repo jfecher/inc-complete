@@ -28,6 +28,12 @@ impl<Storage: Default> Db<Storage> {
     }
 }
 
+impl<S: Default> Default for Db<S> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<S> Db<S> {
     /// Construct a new `Db` object with the given initial storage.
     pub fn with_storage(storage: S) -> Self {

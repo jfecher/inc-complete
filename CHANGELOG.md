@@ -1,3 +1,7 @@
+# 0.4.1
+
+- Added `impl<S: Default> Default for Db<S>`
+
 # 0.4.0
 
 0.4.0 has many changes intended to give more control over serialization to users
