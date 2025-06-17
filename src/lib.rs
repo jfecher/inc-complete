@@ -369,4 +369,4 @@ pub use ::paste;
 
 pub use cell::Cell;
 pub use db::{Db, DbHandle};
-pub use storage::{ Storage, StorageFor, OutputType, Run };
+pub use storage::{ Storage, StorageFor, OutputType, Run, ComputationId };

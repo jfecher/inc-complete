@@ -7,7 +7,7 @@ mod macros;
 mod tuple_impls;
 
 pub use btreemapped::BTreeMapStorage;
-pub use hashmapped::{ HashMapSerializeWrapper, HashMapStorage };
+pub use hashmapped::HashMapStorage;
 pub use singleton::SingletonStorage;
 
 pub trait Storage: Sized {
@@ -21,8 +21,12 @@ pub trait StorageFor<C: OutputType> {
     /// Given a computation key, return the cell associated with it, if it exists.
     fn get_cell_for_computation(&self, key: &C) -> Option<Cell>;
 
-    /// Insert a new Cell with the given Computation that has yet to be run
+    /// Insert a new Cell with the given computation that has yet to be run
     fn insert_new_cell(&mut self, cell: Cell, key: C);
+
+    /// Retrieve the input for this computation.
+    /// The input is expected to already be inserted into this storage.
+    fn get_input(&self, cell: Cell) -> &C;
 
     /// Retrieve the output for the given cell, if it exists
     fn get_output(&self, cell: Cell) -> Option<&C::Output>;
@@ -32,9 +36,6 @@ pub trait StorageFor<C: OutputType> {
     /// if needed.
     fn update_output(&mut self, cell: Cell, new_value: C::Output) -> bool;
 }
-
-/// Marker trait specifying Computation must be an input
-pub trait StorageForInput<C: OutputType> : StorageFor<C> {}
 
 pub trait ComputationId {
     fn computation_id() -> u32;

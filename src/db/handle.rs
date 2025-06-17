@@ -29,6 +29,14 @@ impl<'db, S> DbHandle<'db, S> {
             current_operation,
         }
     }
+
+    pub fn storage(&self) -> &S {
+        self.db.storage()
+    }
+
+    pub fn storage_mut(&mut self) -> &mut S {
+        self.db.storage_mut()
+    }
 }
 
 impl<'db, S: Storage> DbHandle<'db, S> {

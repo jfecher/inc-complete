@@ -1,83 +1,57 @@
 use crate::{
-    Db, DbHandle, OutputType, Intermediate, OutputTypeForInput, Run, SingletonStorage, db::START_VERSION,
+    db::START_VERSION, impl_storage_for_field, storage::SingletonStorage, Db, DbHandle, OutputType, Run
 };
 
-type SafeDiv = (
-    SingletonStorage<OutputType<Numerator>>,
-    SingletonStorage<OutputType<Denominator>>,
-    SingletonStorage<Intermediate<Division>>,
-    SingletonStorage<Intermediate<DenominatorIs0>>,
-    SingletonStorage<Intermediate<Result>>,
-);
+struct SafeDiv {
+    numerator: SingletonStorage<Numerator>,
+    denominator: SingletonStorage<Denominator>,
+    division: SingletonStorage<Division>,
+    denominator_is_0: SingletonStorage<DenominatorIs0>,
+    result: SingletonStorage<Result>,
+}
+
+impl_storage_for_field!(SafeDiv, numerator, Numerator);
+impl_storage_for_field!(SafeDiv, denominator, Denominator);
+impl_storage_for_field!(SafeDiv, division, Division);
+impl_storage_for_field!(SafeDiv, denominator_is_0, DenominatorIs0);
+impl_storage_for_field!(SafeDiv, result, Result);
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 struct Numerator;
-impl Numerator {
-    fn new() -> SingletonStorage<OutputType<Numerator>> {
-        Default::default()
-    }
-}
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 struct Denominator;
-impl Denominator {
-    fn new() -> SingletonStorage<OutputType<Denominator>> {
-        Default::default()
-    }
-}
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 struct Division;
-impl Division {
-    fn new() -> SingletonStorage<Intermediate<Division>> {
-        Default::default()
-    }
-}
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 struct DenominatorIs0;
-impl DenominatorIs0 {
-    fn new() -> SingletonStorage<Intermediate<DenominatorIs0>> {
-        Default::default()
-    }
-}
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 struct Result;
-impl Result {
-    fn new() -> SingletonStorage<Intermediate<Result>> {
-        Default::default()
-    }
-}
 
-impl OutputTypeForInput for Numerator {
-    type Output = i32;
-}
+impl OutputType for Numerator { type Output = i32; }
 
-impl OutputTypeForInput for Denominator {
-    type Output = i32;
-}
+impl OutputType for Denominator { type Output = i32; }
 
-impl Run for Division {
-    type Output = i32;
-
-    fn run(&self, handle: &mut DbHandle<impl crate::Computation>) -> Self::Output {
+impl OutputType for Division { type Output = i32; }
+impl Run<SafeDiv> for Division {
+    fn run(&self, handle: &mut DbHandle<SafeDiv>) -> Self::Output {
         *handle.get(Numerator::new()) / *handle.get(Denominator::new())
     }
 }
 
-impl Run for DenominatorIs0 {
-    type Output = bool;
-
-    fn run(&self, handle: &mut DbHandle<impl crate::Computation>) -> Self::Output {
+impl OutputType for DenominatorIs0 { type Output = bool; }
+impl Run<SafeDiv> for DenominatorIs0 {
+    fn run(&self, handle: &mut DbHandle<DenominatorIs0>) -> Self::Output {
         *handle.get(Denominator::new()) == 0
     }
 }
 
-impl Run for Result {
-    type Output = i32;
-
-    fn run(&self, handle: &mut DbHandle<impl crate::Computation>) -> Self::Output {
+impl OutputType for Result { type Output = i32; }
+impl Run<SafeDiv> for Result {
+    fn run(&self, handle: &mut DbHandle<SafeDiv>) -> Self::Output {
         if *handle.get(DenominatorIs0::new()) {
             0
         } else {

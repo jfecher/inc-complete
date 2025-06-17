@@ -1,11 +1,8 @@
-use crate::Computation;
+use crate::storage::SingletonStorage;
 use crate::Db;
 use crate::DbHandle;
 use crate::OutputType;
-use crate::Intermediate;
-use crate::OutputTypeForInput;
 use crate::Run;
-use crate::SingletonStorage;
 use crate::db::START_VERSION;
 
 // Emulate this spreadsheet:
@@ -15,50 +12,31 @@ use crate::db::START_VERSION;
 // 3 [ =A2 + 2 ]
 #[derive(Clone, Debug, Default)]
 struct A1;
-impl A1 {
-    fn new() -> SingletonStorage<OutputType<A1>> {
-        SingletonStorage::new(OutputType::new(A1))
-    }
-}
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 struct A2;
-impl A2 {
-    fn new() -> SingletonStorage<Intermediate<A2>> {
-        SingletonStorage::new(Intermediate::new(A2))
-    }
-}
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 struct A3;
-impl A3 {
-    fn new() -> SingletonStorage<Intermediate<A3>> {
-        SingletonStorage::new(Intermediate::new(A3))
-    }
+
+struct Spreadsheet {
+    a1: SingletonStorage<A1>,
+    a2: SingletonStorage<A2>,
+    a3: SingletonStorage<A3>,
 }
 
-type Spreadsheet = (
-    SingletonStorage<OutputType<A1>>,
-    SingletonStorage<Intermediate<A2>>,
-    SingletonStorage<Intermediate<A3>>,
-);
+impl OutputType for A1 { type Output = i32; }
 
-impl OutputTypeForInput for A1 {
-    type Output = i32;
-}
-
-impl Run for A2 {
-    type Output = i32;
-
-    fn run(&self, handle: &mut DbHandle<impl Computation>) -> Self::Output {
+impl OutputType for A2 { type Output = i32; }
+impl Run<Spreadsheet> for A2 {
+    fn run(&self, handle: &mut DbHandle<Spreadsheet>) -> Self::Output {
         handle.get(A1::new()) + 1
     }
 }
 
-impl Run for A3 {
-    type Output = i32;
-
-    fn run(&self, handle: &mut DbHandle<impl Computation>) -> Self::Output {
+impl OutputType for A3 { type Output = i32; }
+impl Run<Spreadsheet> for A3 {
+    fn run(&self, handle: &mut DbHandle<Spreadsheet>) -> Self::Output {
         handle.get(A2::new()) + 2
     }
 }

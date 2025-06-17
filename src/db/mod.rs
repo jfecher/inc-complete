@@ -1,5 +1,5 @@
 use crate::cell::CellData;
-use crate::storage::{ComputationId, StorageFor, StorageForInput};
+use crate::storage::{ComputationId, StorageFor};
 use crate::{Cell, OutputType, Storage};
 use petgraph::graph::DiGraph;
 
@@ -24,6 +24,16 @@ impl<Storage: Default> Db<Storage> {
             version: START_VERSION,
             storage: Storage::default(),
         }
+    }
+}
+
+impl<S> Db<S> {
+    pub fn storage(&self) -> &S {
+        &self.storage
+    }
+
+    pub fn storage_mut(&mut self) -> &mut S {
+        &mut self.storage
     }
 }
 
@@ -98,7 +108,7 @@ impl<S: Storage> Db<S> {
         new_value: C::Output,
     ) where
         C: std::fmt::Debug + ComputationId,
-        S: StorageForInput<C>,
+        S: StorageFor<C>,
     {
         let cell_id = self.get_or_insert_cell(input);
         debug_assert!(
@@ -124,14 +134,6 @@ impl<S: Storage> Db<S> {
 
     fn handle(&mut self, cell: Cell) -> DbHandle<S> {
         DbHandle::new(self, cell)
-    }
-
-    pub fn storage(&self) -> &S {
-        &self.storage
-    }
-
-    pub fn storage_mut(&mut self) -> &mut S {
-        &mut self.storage
     }
 
     #[cfg(test)]
