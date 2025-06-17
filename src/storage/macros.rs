@@ -1,8 +1,31 @@
-/// Helper macro to define an intermediate computation type. This will
-/// define the type for you along with a `new` method, `Run` impl and
-/// a function wrapper for `db.get(ComputationType::new())`.
+/// Helper macro to define an intermediate computation type.
+/// This will implement `OutputType`, `ComputationId`, and `Run`.
+///
+/// This macro supports multiple `Storage` types used, separated by `|`,
+/// in case your program uses multiple databases with differing storage types.
+///
+/// Signature:
+/// `define_intermediate!(computation_id, ComputationType -> OutputType, StorageType ( | MoreStorageTypes)*, run_function)`
 ///
 /// Example usage:
+/// ```
+/// # use inc_complete::{ define_intermediate, define_input, storage::SingletonStorage, impl_storage, DbHandle };
+/// # struct MyStorageType { input: SingletonStorage<MyInput>, double: SingletonStorage<Double> }
+/// # #[derive(Clone)]
+/// # struct MyInput;
+/// # define_input!(0, MyInput -> i32, MyStorageType);
+/// # impl_storage!(MyStorageType, input:MyInput, double:Double);
+/// ##[derive(Clone)]
+/// struct Double;
+///
+/// // Define `Double` as a computation with id 1 and the given run function which returns an `i32`
+/// // to be used with a `Db<MyStorageType>` or `DbHandle<MyStorageType>`.
+/// // The type annotations on the closure are unnecessary.
+/// // We also may provide an existing function instead of a closure.
+/// define_intermediate!(1, Double -> i32, MyStorageType, |_: &Double, db: &mut DbHandle<MyStorageType>| {
+///     *db.get(MyInput) * 2
+/// });
+/// ```
 #[macro_export]
 macro_rules! define_intermediate {
     // Without the `->`, rustfmt has really bad formatting when calling this macro
@@ -31,12 +54,33 @@ macro_rules! define_intermediate {
     };
 }
 
-/// Helper macro to define an input type. This will define the type for you along with
-/// an `OutputTypeForInput` impl and a function wrapper for `db.get(ComputationType::new())`.
+/// Helper macro to define an input computation type.
+/// This will implement `OutputType`, `ComputationId`, and `Run`.
+/// Note that the `Run` implementation will panic by default with a message that
+/// `update_input` should have been called beforehand.
 ///
-/// Note that inputs must be set via `db.update_input(MyInputType, value)` before they are used.
+/// This macro supports multiple `Storage` types used, separated by `|`,
+/// in case your program uses multiple databases with differing storage types.
+///
+/// Signature:
+/// `define_input!(computation_id, ComputationType -> OutputType, StorageType ( | MoreStorageTypes)* )`
 ///
 /// Example usage:
+/// ```
+/// # use inc_complete::{ define_intermediate, define_input, storage::SingletonStorage, impl_storage, DbHandle };
+/// # struct MyStorageType { input: SingletonStorage<MyInput>, double: SingletonStorage<Double> }
+/// # impl_storage!(MyStorageType, input:MyInput,double:Double);
+/// # #[derive(Clone)]
+/// # struct Double;
+/// # define_intermediate!(1, Double -> i32, MyStorageType, |_: &Double, db: &mut DbHandle<MyStorageType>| {
+/// #     *db.get(MyInput) * 2
+/// # });
+/// ##[derive(Clone)]
+/// struct MyInput;
+///
+/// // Define `MyInput` as an input computation with id 0 and an `i32` value
+/// // which can be used with a `Db<MyStorageType>`.
+/// define_input!(0, MyInput -> i32, MyStorageType);
 /// ```
 #[macro_export]
 macro_rules! define_input {
@@ -59,5 +103,96 @@ macro_rules! define_input {
             }
         }
         )+
+    };
+}
+
+/// Implements `Storage` for a struct type. This enables the given struct type `S` to be used
+/// as a generic on `Db<S>` to store _all_ computations cached by the program.
+///
+/// This will also create forwarding impls for `StorageFor<ComputationType>` for each field,
+/// computation type pair used.
+///
+/// Example usage:
+/// ```
+/// use inc_complete::{ impl_storage, define_input, define_intermediate };
+/// use inc_complete::storage::{ SingletonStorage, HashMapStorage };
+///
+/// ##[derive(Default)]
+/// struct MyStorage {
+///     foos: SingletonStorage<Foo>,
+///     bars: HashMapStorage<Bar>,
+/// }
+///
+/// impl_storage!(MyStorage,
+///     foos: Foo,
+///     bars: Bar,
+/// );
+///
+/// // Each input & intermediate computation should implement Clone
+/// ##[derive(Clone)]
+/// struct Foo;
+/// define_input!(0, Foo -> usize, MyStorage);
+///
+/// // HashMapStorage requires Eq and Hash
+/// ##[derive(Clone, PartialEq, Eq, Hash)]
+/// struct Bar(std::rc::Rc<String>);
+/// define_intermediate!(1, Bar -> usize, MyStorage, |bar, db| {
+///     bar.0.len() + *db.get(Foo)
+/// });
+/// ```
+///
+/// Note that using this macro requires each computation type to implement `Clone`.
+#[macro_export]
+macro_rules! impl_storage {
+    ($typ:ty, $( $field:ident : $computation_type:ty ),* $(, )? ) => {
+        impl $crate::Storage for $typ {
+            fn output_is_unset(&self, cell: $crate::Cell, computation_id: u32) -> bool {
+                use $crate::StorageFor;
+                match computation_id {
+                    $(
+                        x if x == <$computation_type as $crate::ComputationId>::computation_id() => {
+                            self.$field.get_output(cell).is_none()
+                        },
+                    )*
+                    id => panic!("Unknown computation id: {id}"),
+                }
+            }
+
+            fn run_computation(db: &mut $crate::DbHandle<Self>, cell: $crate::Cell, computation_id: u32) -> bool {
+                use $crate::{ StorageFor, Run };
+                match computation_id {
+                    $(
+                        x if x == <$computation_type as $crate::ComputationId>::computation_id() => {
+                            let new_value = db.storage().$field.get_input(cell).clone().run(db);
+                            db.storage_mut().$field.update_output(cell, new_value)
+                        }
+                    )*
+                    id => panic!("Unknown computation id: {id}"),
+                }
+            }
+        }
+
+        $(
+        impl $crate::StorageFor<$computation_type> for $typ {
+            fn get_cell_for_computation(&self, key: &$computation_type) -> Option<$crate::Cell> {
+                self.$field.get_cell_for_computation(key)
+            }
+
+            fn insert_new_cell(&mut self, cell: $crate::Cell, key: $computation_type) {
+                self.$field.insert_new_cell(cell, key)
+            }
+
+            fn get_input(&self, cell: $crate::Cell) -> &$computation_type {
+                self.$field.get_input(cell)
+            }
+
+            fn get_output(&self, cell: $crate::Cell) -> Option<&<$computation_type as $crate::OutputType>::Output> {
+                self.$field.get_output(cell)
+            }
+
+            fn update_output(&mut self, cell: $crate::Cell, new_value: <$computation_type as $crate::OutputType>::Output) -> bool {
+                self.$field.update_output(cell, new_value)
+            }
+        })*
     };
 }

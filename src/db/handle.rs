@@ -33,10 +33,15 @@ impl<'db, S> DbHandle<'db, S> {
         }
     }
 
+    /// Retrieve an immutable reference to this `Db`'s storage
     pub fn storage(&self) -> &S {
         self.db.storage()
     }
 
+    /// Retrieve a mutable reference to the internal database's storage.
+    ///
+    /// Note that any mutations made to the storage using this are _not_ tracked by the database!
+    /// Using this incorrectly may break correctness!
     pub fn storage_mut(&mut self) -> &mut S {
         self.db.storage_mut()
     }

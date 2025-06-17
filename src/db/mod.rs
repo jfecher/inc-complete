@@ -10,6 +10,10 @@ pub use handle::DbHandle;
 
 const START_VERSION: u32 = 1;
 
+/// The central database object to manage and cache incremental computations.
+///
+/// To use this, a type implementing `Storage` is required to be provided.
+/// See the documentation for `impl_storage!`.
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct Db<Storage> {
     cells: DiGraph<CellData, ()>,
@@ -18,20 +22,31 @@ pub struct Db<Storage> {
 }
 
 impl<Storage: Default> Db<Storage> {
+    /// Construct a new `Db` object using `Default::default()` for the initial storage.
     pub fn new() -> Self {
-        Self {
-            cells: DiGraph::default(),
-            version: START_VERSION,
-            storage: Storage::default(),
-        }
+        Self::with_storage(Storage::default())
     }
 }
 
 impl<S> Db<S> {
+    /// Construct a new `Db` object with the given initial storage.
+    pub fn with_storage(storage: S) -> Self {
+        Self {
+            cells: DiGraph::default(),
+            version: START_VERSION,
+            storage,
+        }
+    }
+
+    /// Retrieve an immutable reference to this `Db`'s storage
     pub fn storage(&self) -> &S {
         &self.storage
     }
 
+    /// Retrieve a mutable reference to this `Db`'s storage.
+    ///
+    /// Note that any mutations made to the storage using this are _not_ tracked by the `Db`!
+    /// Using this incorrectly may break correctness!
     pub fn storage_mut(&mut self) -> &mut S {
         &mut self.storage
     }
@@ -55,7 +70,7 @@ impl<S: Storage> Db<S> {
 
     /// True if a given cell is stale and needs to be re-computed.
     /// This does not actually re-compute the input.
-    pub fn is_stale_cell(&self, cell: Cell) -> bool {
+    fn is_stale_cell(&self, cell: Cell) -> bool {
         let computation_id = self.cells[cell.index()].computation_id;
         if self.storage.output_is_unset(cell, computation_id) {
             return true;
@@ -76,14 +91,14 @@ impl<S: Storage> Db<S> {
     /// Return the corresponding Cell for a given computation, if it exists.
     ///
     /// This will not update any values.
-    pub fn get_cell<C: OutputType>(&self, computation: &C) -> Option<Cell>
+    fn get_cell<C: OutputType>(&self, computation: &C) -> Option<Cell>
     where
         S: StorageFor<C>,
     {
         self.storage.get_cell_for_computation(computation)
     }
 
-    pub fn get_or_insert_cell<C>(&mut self, input: C) -> Cell
+    pub(crate) fn get_or_insert_cell<C>(&mut self, input: C) -> Cell
     where
         C: OutputType + ComputationId,
         S: StorageFor<C>,
@@ -102,8 +117,8 @@ impl<S: Storage> Db<S> {
 
     /// Updates an input with a new value
     ///
-    /// May panic in Debug mode if the input is not an input - ie. it has at least 1 dependency.
-    /// Note that this step is skipped when compiling in Release mode.
+    /// Panics in debug mode if the input is not an input - ie. it has at least 1 dependency.
+    /// Note that this check is skipped when compiling in Release mode.
     pub fn update_input<C: OutputType>(&mut self, input: C, new_value: C::Output)
     where
         C: std::fmt::Debug + ComputationId,
@@ -197,7 +212,7 @@ impl<S: Storage> Db<S> {
     /// necessary.
     ///
     /// This function can panic if the dynamic type of the value returned by `compute.run(..)` is not `T`.
-    pub fn get_with_cell<Concrete: OutputType>(&mut self, cell_id: Cell) -> &Concrete::Output
+    pub(crate) fn get_with_cell<Concrete: OutputType>(&mut self, cell_id: Cell) -> &Concrete::Output
     where
         S: StorageFor<Concrete>,
     {

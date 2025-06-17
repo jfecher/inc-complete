@@ -4,19 +4,38 @@ mod btreemapped;
 mod hashmapped;
 mod macros;
 mod singleton;
-mod tuple_impls;
 
 pub use btreemapped::BTreeMapStorage;
 pub use hashmapped::HashMapStorage;
 pub use singleton::SingletonStorage;
 
+/// The Storage trait is implemented on a type which can cache all of the computations
+/// used in the program (or a subset of it). These types are typically composed of
+/// several fields with each field implementing `StorageFor<T>` where `T` is one
+/// computation type. Note that each computation type must be unique within a `Storage` type.
+///
+/// This trait is most often automatically implemented by `impl_storage!`, see the documentation
+/// on that macro for usage details.
+///
+/// Note that during serialization, the entire Storage is serialized along with the `Db` object.
+/// To achieve backwards-compatible serialization even when new fields for new computation types
+/// are added, it is recommended to use `#[serde(default)]` on any newly-added fields to still
+/// be able to deserialize from older versions without that field.
 pub trait Storage: Sized {
+    /// For the computation type with the given computation id, return true if the
+    /// output with the given Cell has not yet been set.
     fn output_is_unset(&self, cell: Cell, computation_id: u32) -> bool;
 
-    /// Run a computation, returning true if the result changed from its previous value.
+    /// For the computation type with the given computation id, run the computation
+    /// with the corresponding Cell, returning true if the result changed from its previous value.
     fn run_computation(db: &mut DbHandle<Self>, cell: Cell, computation_id: u32) -> bool;
 }
 
+/// This trait is implemented by a type storing a single computation type `C`.
+/// Examples include `HashMapStorage<C>`, `SingletonStorage<C>`, and `BTreeMapStorage<C>`.
+///
+/// To implement this efficiently, most types implementing this are two-way maps
+/// from `C` to `Cell` and from `Cell` to `(C, Option<C::Output>)`.
 pub trait StorageFor<C: OutputType> {
     /// Given a computation key, return the cell associated with it, if it exists.
     fn get_cell_for_computation(&self, key: &C) -> Option<Cell>;
