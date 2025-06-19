@@ -1,6 +1,7 @@
 use crate::{Cell, DbHandle};
 
 mod btreemapped;
+mod dashmapped;
 mod hashmapped;
 mod macros;
 mod singleton;
@@ -28,7 +29,7 @@ pub trait Storage: Sized {
 
     /// For the computation type with the given computation id, run the computation
     /// with the corresponding Cell, returning true if the result changed from its previous value.
-    fn run_computation(db: &mut DbHandle<Self>, cell: Cell, computation_id: u32) -> bool;
+    fn run_computation(db: &DbHandle<Self>, cell: Cell, computation_id: u32) -> bool;
 }
 
 /// This trait is implemented by a type storing a single computation type `C`.
@@ -41,7 +42,7 @@ pub trait StorageFor<C: OutputType> {
     fn get_cell_for_computation(&self, key: &C) -> Option<Cell>;
 
     /// Insert a new Cell with the given computation that has yet to be run
-    fn insert_new_cell(&mut self, cell: Cell, key: C);
+    fn insert_new_cell(&self, cell: Cell, key: C);
 
     /// Retrieve the input for this computation.
     /// The input is expected to already be inserted into this storage.
@@ -53,7 +54,7 @@ pub trait StorageFor<C: OutputType> {
     /// `C` has been re-run and has returned the output `new_value`, return `true`
     /// if `new_value` has changed from its previous value, and cache the new value
     /// if needed.
-    fn update_output(&mut self, cell: Cell, new_value: C::Output) -> bool;
+    fn update_output(&self, cell: Cell, new_value: C::Output) -> bool;
 }
 
 pub trait ComputationId {

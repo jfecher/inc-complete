@@ -1,17 +1,19 @@
 use std::collections::HashMap;
 
+use dashmap::DashMap;
+
 use crate::{Cell, storage::StorageFor};
 use std::hash::Hash;
 
 use super::OutputType;
 
 #[derive(Clone)]
-pub struct HashMapStorage<K: OutputType> {
-    key_to_cell: HashMap<K, Cell>,
-    cell_to_key: HashMap<Cell, (K, Option<K::Output>)>,
+pub struct DashMapStorage<K: OutputType + Eq + Hash> {
+    key_to_cell: DashMap<K, Cell>,
+    cell_to_key: DashMap<Cell, (K, Option<K::Output>)>,
 }
 
-impl<K: OutputType> Default for HashMapStorage<K> {
+impl<K: OutputType + Eq + Hash> Default for DashMapStorage<K> {
     fn default() -> Self {
         Self {
             key_to_cell: Default::default(),
@@ -20,13 +22,13 @@ impl<K: OutputType> Default for HashMapStorage<K> {
     }
 }
 
-impl<K> StorageFor<K> for HashMapStorage<K>
+impl<K> StorageFor<K> for DashMapStorage<K>
 where
     K: Clone + Eq + Hash + OutputType,
     K::Output: Eq,
 {
     fn get_cell_for_computation(&self, key: &K) -> Option<Cell> {
-        self.key_to_cell.get(key).copied()
+        self.key_to_cell.get(key).map(|value| *value)
     }
 
     fn insert_new_cell(&self, cell: Cell, key: K) {
@@ -35,26 +37,26 @@ where
     }
 
     fn get_input(&self, cell: Cell) -> &K {
-        &self.cell_to_key[&cell].0
+        &self.cell_to_key.get(&cell).unwrap().0
     }
 
     fn get_output(&self, cell: Cell) -> Option<&K::Output> {
-        self.cell_to_key[&cell].1.as_ref()
+        self.cell_to_key.get(&cell).unwrap().1.as_ref()
     }
 
     fn update_output(&self, cell: Cell, new_value: K::Output) -> bool {
-        let previous_output = &self.cell_to_key.get_mut(&cell).unwrap().1;
-        let changed = previous_output
+        let mut previous_output = self.cell_to_key.get_mut(&cell).unwrap();
+        let changed = previous_output.1
             .as_ref()
             .is_none_or(|value| *value != new_value);
-        *previous_output = Some(new_value);
+        previous_output.1 = Some(new_value);
         changed
     }
 }
 
-impl<K> serde::Serialize for HashMapStorage<K>
+impl<K> serde::Serialize for DashMapStorage<K>
 where
-    K: serde::Serialize + OutputType,
+    K: serde::Serialize + OutputType + Eq + Hash,
     K::Output: serde::Serialize,
 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -65,7 +67,7 @@ where
     }
 }
 
-impl<'de, K> serde::Deserialize<'de> for HashMapStorage<K>
+impl<'de, K> serde::Deserialize<'de> for DashMapStorage<K>
 where
     K: serde::Deserialize<'de> + Hash + Eq + OutputType + Clone,
     K::Output: serde::Deserialize<'de>,
@@ -74,13 +76,14 @@ where
     where
         D: serde::Deserializer<'de>,
     {
-        let cell_to_key: HashMap<Cell, (K, Option<K::Output>)> =
+        let cell_to_key: DashMap<Cell, (K, Option<K::Output>)> =
             serde::Deserialize::deserialize(deserializer)?;
+
         let key_to_cell = cell_to_key
             .iter()
-            .map(|(cell, (key, _))| (key.clone(), *cell))
+            .map(|entry| (entry.value().0.clone(), *entry.key()))
             .collect();
-        Ok(HashMapStorage {
+        Ok(DashMapStorage {
             cell_to_key,
             key_to_cell,
         })

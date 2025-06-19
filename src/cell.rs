@@ -1,15 +1,14 @@
+use std::collections::HashSet;
+
 #[derive(
     Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
 )]
-pub struct Cell(petgraph::graph::NodeIndex);
+#[serde(transparent)]
+pub struct Cell(u32);
 
 impl Cell {
-    pub(crate) fn new(index: petgraph::graph::NodeIndex) -> Self {
+    pub(crate) fn new(index: u32) -> Self {
         Self(index)
-    }
-
-    pub(crate) fn index(self) -> petgraph::graph::NodeIndex {
-        self.0
     }
 }
 
@@ -18,6 +17,7 @@ pub(crate) struct CellData {
     pub(crate) computation_id: u32,
     pub(crate) last_updated_version: u32,
     pub(crate) last_verified_version: u32,
+    pub(crate) dependencies: HashSet<Cell>,
 }
 
 impl CellData {
@@ -26,6 +26,7 @@ impl CellData {
             computation_id,
             last_updated_version: 0,
             last_verified_version: 0,
+            dependencies: HashSet::default(),
         }
     }
 }
