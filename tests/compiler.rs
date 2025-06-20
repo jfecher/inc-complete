@@ -37,25 +37,25 @@ define_input!(0, Input -> String, Compiler);
 
 // fn parse(db) -> Result<Ast, Error>
 //   depends on: Input
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct Parse;
 define_intermediate!(1, Parse -> Result<Ast, Error>, Compiler, parse_program);
 
 // fn check(ast: Rc<Ast>, env: Rc<CheckEnv>, db) -> Result<(), Error>
 //   depends on: Check(subtree, _)
-#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 struct Check(Rc<Ast>, Rc<CheckEnv>);
 define_intermediate!(2, Check -> Result<(), Error>, Compiler, check_impl);
 
 // fn execute(ast: Rc<Ast>, env: Rc<ExecEnv>, db) -> Result<i64, Error>
 //   depends on: Execute(subtree, _)
-#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 struct Execute(Rc<Ast>, Rc<ExecEnv>);
 define_intermediate!(3, Execute -> Result<i64, Error>, Compiler, execute_impl);
 
 // fn execute_all(db) -> Result<i64, Error>
 //   depends on: Check(..), Execute(..)
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct ExecuteAll;
 define_intermediate!(4, ExecuteAll -> Result<i64, Error>, Compiler, execute_all_impl);
 

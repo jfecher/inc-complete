@@ -39,14 +39,17 @@ define_input!(0, Numerator -> i32, SafeDiv);
 define_input!(1, Denominator -> i32, SafeDiv);
 
 define_intermediate!(2, Division -> i32, SafeDiv, |_, handle: &mut DbHandle<SafeDiv>| {
+    println!("division");
     *handle.get(Numerator) / *handle.get(Denominator)
 });
 
 define_intermediate!(3, DenominatorIs0 -> bool, SafeDiv, |_, handle: &mut DbHandle<SafeDiv>| {
+    println!("denominator is 0");
     *handle.get(Denominator) == 0
 });
 
 define_intermediate!(4, Result -> i32, SafeDiv, |_, handle: &mut DbHandle<SafeDiv>| {
+    println!("result");
     if *handle.get(DenominatorIs0) {
         0
     } else {
@@ -89,8 +92,11 @@ fn dynamic_dependency_not_run() {
     // 6 / 2
     assert_eq!(3i32, *db.get(Result));
 
+    println!("\n");
+
     db.update_input(Denominator, 0);
     assert_eq!(db.version, START_VERSION + 3);
+
 
     // Although Division was previously a dependency of Result,
     // we shouldn't update Division due to the `DenominatorIs0` changing as well,

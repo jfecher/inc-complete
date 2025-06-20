@@ -48,19 +48,19 @@ struct Strings {
 }
 
 define_intermediate!(1, CountAs -> usize, Storage | StorageWithoutAsPlusBs, count_as_impl);
-#[derive(Serialize, Deserialize, Clone, PartialOrd, Ord, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialOrd, Ord, PartialEq, Eq)]
 struct CountAs {
     name: String,
 }
 
 define_intermediate!(2, CountBs -> usize, Storage | StorageWithoutAsPlusBs, count_bs_impl);
-#[derive(Serialize, Deserialize, Clone, PartialOrd, Ord, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialOrd, Ord, PartialEq, Eq)]
 struct CountBs {
     name: String,
 }
 
 define_intermediate!(3, AsPlusBs -> usize, Storage | StorageWithoutAsPlusBs, as_plus_bs_impl);
-#[derive(Serialize, Deserialize, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, Clone, Hash, PartialEq, Eq)]
 struct AsPlusBs {
     name: String,
 }

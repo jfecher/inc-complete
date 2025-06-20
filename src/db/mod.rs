@@ -63,7 +63,7 @@ impl<S: Storage> Db<S> {
     /// Inputs which have never been computed are also considered stale.
     ///
     /// This does not actually re-compute the input.
-    pub fn is_stale<C: OutputType>(&self, input: &C) -> bool
+    pub fn is_stale<C: OutputType>(&mut self, input: &C) -> bool
     where
         S: StorageFor<C>,
     {
@@ -76,8 +76,11 @@ impl<S: Storage> Db<S> {
 
     /// True if a given cell is stale and needs to be re-computed.
     /// This does not actually re-compute the input.
-    fn is_stale_cell(&self, cell: Cell) -> bool {
-        let computation_id = self.cells[cell.index()].computation_id;
+    fn is_stale_cell(&mut self, cell: Cell) -> bool {
+        let data = &self.cells[cell.index()];
+        let computation_id = data.computation_id;
+        let last_verified = data.last_verified_version;
+
         if self.storage.output_is_unset(cell, computation_id) {
             return true;
         }
@@ -85,12 +88,12 @@ impl<S: Storage> Db<S> {
         let neighbors = self.cells.neighbors(cell.index()).collect::<Vec<_>>();
 
         // if any dependency may have changed, this cell is stale
-        neighbors.into_iter().any(|dependency_id| {
-            let dependency = &self.cells[dependency_id];
-            let cell = &self.cells[cell.index()];
+        neighbors.into_iter().rev().any(|dependency_id| {
+            self.update_cell(Cell::new(dependency_id));
 
-            dependency.last_verified_version != self.version
-                || dependency.last_updated_version > cell.last_verified_version
+            // This cell is stale if the dependency has been updated since
+            // we last verified this cell
+            self.cells[dependency_id].last_updated_version > last_verified
         })
     }
 
@@ -127,7 +130,7 @@ impl<S: Storage> Db<S> {
     /// Note that this check is skipped when compiling in Release mode.
     pub fn update_input<C: OutputType>(&mut self, input: C, new_value: C::Output)
     where
-        C: std::fmt::Debug + ComputationId,
+        C: ComputationId,
         S: StorageFor<C>,
     {
         let cell_id = self.get_or_insert_cell(input);
@@ -159,12 +162,11 @@ impl<S: Storage> Db<S> {
     #[cfg(test)]
     pub(crate) fn unwrap_cell_value<C: OutputType>(&self, input: &C) -> &CellData
     where
-        C: std::fmt::Debug,
         S: StorageFor<C>,
     {
         let cell = self
             .get_cell(input)
-            .unwrap_or_else(|| panic!("unwrap_cell_value: Expected cell for `{input:?}` to exist"));
+            .unwrap_or_else(|| panic!("unwrap_cell_value: Expected cell to exist"));
         &self.cells[cell.index()]
     }
 
@@ -192,7 +194,7 @@ impl<S: Storage> Db<S> {
         let cell = &self.cells[cell_id.index()];
 
         if cell.last_verified_version != self.version {
-            // if any dependency may have changed, update
+            // if any dependency has changed, update
             if self.is_stale_cell(cell_id) {
                 self.run_compute_function(cell_id);
             } else {
