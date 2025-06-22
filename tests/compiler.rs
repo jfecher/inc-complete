@@ -5,7 +5,7 @@ use std::{
 
 use inc_complete::{
     Db, DbHandle, define_input, define_intermediate, impl_storage,
-    storage::{HashMapStorage, SingletonStorage},
+    storage::{DashMapStorage, SingletonStorage},
 };
 
 /// Test a somewhat more complex case with nested computations
@@ -17,8 +17,8 @@ use inc_complete::{
 struct Compiler {
     input: SingletonStorage<Input>,
     parse: SingletonStorage<Parse>,
-    check: HashMapStorage<Check>,
-    execute: HashMapStorage<Execute>,
+    check: DashMapStorage<Check>,
+    execute: DashMapStorage<Execute>,
     execute_all: SingletonStorage<ExecuteAll>,
 }
 
@@ -37,25 +37,25 @@ define_input!(0, Input -> String, Compiler);
 
 // fn parse(db) -> Result<Ast, Error>
 //   depends on: Input
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct Parse;
 define_intermediate!(1, Parse -> Result<Ast, Error>, Compiler, parse_program);
 
 // fn check(ast: Rc<Ast>, env: Rc<CheckEnv>, db) -> Result<(), Error>
 //   depends on: Check(subtree, _)
-#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 struct Check(Rc<Ast>, Rc<CheckEnv>);
 define_intermediate!(2, Check -> Result<(), Error>, Compiler, check_impl);
 
 // fn execute(ast: Rc<Ast>, env: Rc<ExecEnv>, db) -> Result<i64, Error>
 //   depends on: Execute(subtree, _)
-#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 struct Execute(Rc<Ast>, Rc<ExecEnv>);
 define_intermediate!(3, Execute -> Result<i64, Error>, Compiler, execute_impl);
 
 // fn execute_all(db) -> Result<i64, Error>
 //   depends on: Check(..), Execute(..)
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct ExecuteAll;
 define_intermediate!(4, ExecuteAll -> Result<i64, Error>, Compiler, execute_all_impl);
 
@@ -96,9 +96,9 @@ type ExecEnv = BTreeMap<String, i64>;
 /// integer: -?[0-9]
 /// add: '(' '+' expr expr ')'
 /// let: '(' 'let' variable expr expr ')'
-fn parse_program(_: &Parse, db: &mut DbHandle<Compiler>) -> Result<Ast, Error> {
-    let program: &String = db.get(Input);
-    let (ast, rest) = parse_value(program)?;
+fn parse_program(_: &Parse, db: &DbHandle<Compiler>) -> Result<Ast, Error> {
+    let program: String = db.get(Input);
+    let (ast, rest) = parse_value(&program)?;
 
     if !rest.trim().is_empty() {
         Err(Error::InputEmptyOrUnparsedOutput(rest.to_string()))
@@ -205,7 +205,7 @@ fn next_whitespace_or_rparen_index(text: &str) -> usize {
 }
 
 /// Ensure all variables are defined or return an Error
-fn check_impl(check: &Check, db: &mut DbHandle<Compiler>) -> Result<(), Error> {
+fn check_impl(check: &Check, db: &DbHandle<Compiler>) -> Result<(), Error> {
     let ast = check.0.as_ref();
     let env = &check.1;
 
@@ -219,20 +219,20 @@ fn check_impl(check: &Check, db: &mut DbHandle<Compiler>) -> Result<(), Error> {
         }
         Ast::Int(_) => Ok(()),
         Ast::Add(lhs, rhs) => {
-            db.get(Check(lhs.clone(), env.clone())).clone()?;
-            db.get(Check(rhs.clone(), env.clone())).clone()
+            db.get(Check(lhs.clone(), env.clone()))?;
+            db.get(Check(rhs.clone(), env.clone()))
         }
         Ast::Let { name, rhs, body } => {
-            db.get(Check(rhs.clone(), env.clone())).clone()?;
+            db.get(Check(rhs.clone(), env.clone()))?;
 
             let mut new_env = env.as_ref().clone();
             new_env.insert(name.clone());
-            db.get(Check(body.clone(), Rc::new(new_env))).clone()
+            db.get(Check(body.clone(), Rc::new(new_env)))
         }
     }
 }
 
-fn execute_impl(execute: &Execute, db: &mut DbHandle<Compiler>) -> Result<i64, Error> {
+fn execute_impl(execute: &Execute, db: &DbHandle<Compiler>) -> Result<i64, Error> {
     let ast = execute.0.as_ref();
     let env = &execute.1;
 
@@ -243,16 +243,16 @@ fn execute_impl(execute: &Execute, db: &mut DbHandle<Compiler>) -> Result<i64, E
         }
         Ast::Int(x) => Ok(*x),
         Ast::Add(lhs, rhs) => {
-            let lhs = db.get(Execute(lhs.clone(), env.clone())).clone()?;
-            let rhs = db.get(Execute(rhs.clone(), env.clone())).clone()?;
+            let lhs = db.get(Execute(lhs.clone(), env.clone()))?;
+            let rhs = db.get(Execute(rhs.clone(), env.clone()))?;
             Ok(lhs + rhs)
         }
         Ast::Let { name, rhs, body } => {
-            let rhs = db.get(Execute(rhs.clone(), env.clone())).clone()?;
+            let rhs = db.get(Execute(rhs.clone(), env.clone()))?;
 
             let mut new_env = env.as_ref().clone();
             new_env.insert(name.clone(), rhs);
-            db.get(Execute(body.clone(), Rc::new(new_env))).clone()
+            db.get(Execute(body.clone(), Rc::new(new_env)))
         }
     }
 }
@@ -263,13 +263,11 @@ fn execute_impl(execute: &Execute, db: &mut DbHandle<Compiler>) -> Result<i64, E
 /// at each recursive step is still wasteful. So a separate rule is used here to run the entire
 /// check pass, followed by the entire execute pass which resembles how a typical compiler is
 /// structured.
-fn execute_all_impl(_: &ExecuteAll, db: &mut DbHandle<Compiler>) -> Result<i64, Error> {
-    let ast = db.get(Parse).clone()?;
+fn execute_all_impl(_: &ExecuteAll, db: &DbHandle<Compiler>) -> Result<i64, Error> {
+    let ast = db.get(Parse)?;
     let ast = Rc::new(ast);
-    db.get(Check(ast.clone(), Rc::new(CheckEnv::new())))
-        .clone()?;
+    db.get(Check(ast.clone(), Rc::new(CheckEnv::new())))?;
     db.get(Execute(ast.clone(), Rc::new(ExecEnv::new())))
-        .clone()
 }
 
 fn set_input(db: &mut Db<Compiler>, source_program: &str) {
@@ -285,30 +283,30 @@ mod compiler {
         let mut db = Db::<Compiler>::new();
 
         set_input(&mut db, "42");
-        let result = db.get(ExecuteAll).clone();
+        let result = db.get(ExecuteAll);
         assert_eq!(result, Ok(42));
 
         set_input(&mut db, "(+ 42 58)");
-        let result = db.get(ExecuteAll).clone();
+        let result = db.get(ExecuteAll);
         assert_eq!(result, Ok(100));
 
         set_input(&mut db, "(let foo 42 (+ 58 foo))");
-        let result = db.get(ExecuteAll).clone();
+        let result = db.get(ExecuteAll);
         assert_eq!(result, Ok(100));
 
         set_input(&mut db, "(let foo 42 (+ 58 foo)) foo");
-        let result = db.get(ExecuteAll).clone();
+        let result = db.get(ExecuteAll);
         assert_eq!(
             result,
             Err(Error::InputEmptyOrUnparsedOutput(" foo".to_string()))
         );
 
         set_input(&mut db, "(let foo 42 (+ foo bar))");
-        let result = db.get(ExecuteAll).clone();
+        let result = db.get(ExecuteAll);
         assert_eq!(result, Err(Error::NameNotDefined("bar".to_string())));
 
         set_input(&mut db, "(let foo 42 (let bar 8 (+ foo bar)))");
-        let result = db.get(ExecuteAll).clone();
+        let result = db.get(ExecuteAll);
         assert_eq!(result, Ok(50));
     }
 
@@ -317,12 +315,12 @@ mod compiler {
         let mut db = Db::<Compiler>::new();
 
         set_input(&mut db, "(+ 42 58)");
-        let result = db.get(ExecuteAll).clone();
+        let result = db.get(ExecuteAll);
         assert_eq!(result, Ok(100));
 
         // Update the input, aiming to re-use a previous computation
         set_input(&mut db, "42");
-        let ast = db.get(Parse).clone().unwrap();
+        let ast = db.get(Parse).unwrap();
         assert_eq!(ast, Ast::Int(42));
 
         // Although the input has changed, we cache each intermediate result and shouldn't

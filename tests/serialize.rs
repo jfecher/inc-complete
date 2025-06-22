@@ -1,14 +1,14 @@
 use inc_complete::{
     Db, DbHandle, StorageFor, define_input, define_intermediate, impl_storage,
-    storage::{BTreeMapStorage, HashMapStorage},
+    storage::DashMapStorage,
 };
 use serde::{Deserialize, Serialize};
 
 #[derive(Default, Serialize, Deserialize)]
 struct StorageWithoutAsPlusBs {
-    strings: BTreeMapStorage<Strings>,
-    count_as: BTreeMapStorage<CountAs>,
-    count_bs: BTreeMapStorage<CountBs>,
+    strings: DashMapStorage<Strings>,
+    count_as: DashMapStorage<CountAs>,
+    count_bs: DashMapStorage<CountBs>,
 }
 
 impl_storage!(StorageWithoutAsPlusBs,
@@ -25,12 +25,12 @@ impl_storage!(StorageWithoutAsPlusBs,
 /// for json at least - this may depend on your exact serialization format.
 #[derive(Default, Serialize, Deserialize)]
 struct Storage {
-    strings: BTreeMapStorage<Strings>,
-    count_as: BTreeMapStorage<CountAs>,
-    count_bs: BTreeMapStorage<CountBs>,
+    strings: DashMapStorage<Strings>,
+    count_as: DashMapStorage<CountAs>,
+    count_bs: DashMapStorage<CountBs>,
 
     #[serde(default)]
-    as_plus_bs: HashMapStorage<AsPlusBs>,
+    as_plus_bs: DashMapStorage<AsPlusBs>,
 }
 
 impl_storage!(Storage,
@@ -42,32 +42,32 @@ impl_storage!(Storage,
 
 // `Storage | StorageWithoutAsPlusBs` is syntax to implement `Run` for multiple storage types.
 define_input!(0, Strings -> String, Storage | StorageWithoutAsPlusBs);
-#[derive(Debug, Serialize, Deserialize, Clone, PartialOrd, Ord, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
 struct Strings {
     name: String,
 }
 
 define_intermediate!(1, CountAs -> usize, Storage | StorageWithoutAsPlusBs, count_as_impl);
-#[derive(Serialize, Deserialize, Clone, PartialOrd, Ord, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
 struct CountAs {
     name: String,
 }
 
 define_intermediate!(2, CountBs -> usize, Storage | StorageWithoutAsPlusBs, count_bs_impl);
-#[derive(Serialize, Deserialize, Clone, PartialOrd, Ord, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
 struct CountBs {
     name: String,
 }
 
 define_intermediate!(3, AsPlusBs -> usize, Storage | StorageWithoutAsPlusBs, as_plus_bs_impl);
-#[derive(Serialize, Deserialize, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, Clone, Hash, PartialEq, Eq)]
 struct AsPlusBs {
     name: String,
 }
 
 fn count_as_impl<S: inc_complete::Storage + StorageFor<Strings>>(
     this: &CountAs,
-    db: &mut DbHandle<S>,
+    db: &DbHandle<S>,
 ) -> usize {
     let input = db.get(Strings {
         name: this.name.clone(),
@@ -77,7 +77,7 @@ fn count_as_impl<S: inc_complete::Storage + StorageFor<Strings>>(
 
 fn count_bs_impl<S: inc_complete::Storage + StorageFor<Strings>>(
     this: &CountBs,
-    db: &mut DbHandle<S>,
+    db: &DbHandle<S>,
 ) -> usize {
     let input = db.get(Strings {
         name: this.name.clone(),
@@ -85,13 +85,13 @@ fn count_bs_impl<S: inc_complete::Storage + StorageFor<Strings>>(
     input.chars().filter(|c| *c == 'b').count()
 }
 
-fn as_plus_bs_impl<S>(params: &AsPlusBs, db: &mut DbHandle<S>) -> usize
+fn as_plus_bs_impl<S>(params: &AsPlusBs, db: &DbHandle<S>) -> usize
 where
     S: inc_complete::Storage + StorageFor<Strings> + StorageFor<CountAs> + StorageFor<CountBs>,
 {
     let name = &params.name;
-    let a_count = *db.get(CountAs { name: name.clone() });
-    let b_count = *db.get(CountBs { name: name.clone() });
+    let a_count = db.get(CountAs { name: name.clone() });
+    let b_count = db.get(CountBs { name: name.clone() });
     a_count + b_count
 }
 
@@ -105,7 +105,7 @@ fn still_cached_after_serialize() {
         "ababababab ababababab".to_string(),
     );
 
-    assert_eq!(*db.get(CountAs { name: half.clone() }), 10);
+    assert_eq!(db.get(CountAs { name: half.clone() }), 10);
 
     let serialized = serde_json::to_string(&db).unwrap();
     let mut new_db: Db<Storage> = serde_json::from_str(&serialized).unwrap();
@@ -113,7 +113,7 @@ fn still_cached_after_serialize() {
     assert!(!new_db.is_stale(&CountAs { name: half.clone() }));
     assert!(new_db.is_stale(&AsPlusBs { name: half.clone() }));
 
-    assert_eq!(*new_db.get(AsPlusBs { name: half.clone() }), 20);
+    assert_eq!(new_db.get(AsPlusBs { name: half.clone() }), 20);
 
     assert!(!new_db.is_stale(&AsPlusBs { name: half.clone() }));
     assert!(db.is_stale(&AsPlusBs { name: half.clone() }));
@@ -140,8 +140,8 @@ fn extend_preexisting_db_from_end() {
 
     // Ensure everything in the original database is filled so we can assert
     // the new item in the new_db later on is not
-    assert_eq!(*db.get(CountAs { name: half.clone() }), 10);
-    assert_eq!(*db.get(CountBs { name: half.clone() }), 10);
+    assert_eq!(db.get(CountAs { name: half.clone() }), 10);
+    assert_eq!(db.get(CountBs { name: half.clone() }), 10);
 
     let serialized = serde_json::to_string(&db).unwrap();
 
@@ -152,5 +152,5 @@ fn extend_preexisting_db_from_end() {
     assert!(!extended_db.is_stale(&CountBs { name: half.clone() }));
     assert!(extended_db.is_stale(&AsPlusBs { name: half.clone() }));
 
-    assert_eq!(*extended_db.get(AsPlusBs { name: half.clone() }), 20);
+    assert_eq!(extended_db.get(AsPlusBs { name: half.clone() }), 20);
 }

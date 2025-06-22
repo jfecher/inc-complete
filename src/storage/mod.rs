@@ -1,13 +1,10 @@
 use crate::{Cell, DbHandle};
 
-mod btreemapped;
 mod dashmapped;
-mod hashmapped;
 mod macros;
 mod singleton;
 
-pub use btreemapped::BTreeMapStorage;
-pub use hashmapped::HashMapStorage;
+pub use dashmapped::DashMapStorage;
 pub use singleton::SingletonStorage;
 
 /// The Storage trait is implemented on a type which can cache all of the computations
@@ -46,10 +43,10 @@ pub trait StorageFor<C: OutputType> {
 
     /// Retrieve the input for this computation.
     /// The input is expected to already be inserted into this storage.
-    fn get_input(&self, cell: Cell) -> &C;
+    fn get_input(&self, cell: Cell) -> C;
 
     /// Retrieve the output for the given cell, if it exists
-    fn get_output(&self, cell: Cell) -> Option<&C::Output>;
+    fn get_output(&self, cell: Cell) -> Option<C::Output>;
 
     /// `C` has been re-run and has returned the output `new_value`, return `true`
     /// if `new_value` has changed from its previous value, and cache the new value
@@ -66,5 +63,5 @@ pub trait OutputType {
 }
 
 pub trait Run<Storage>: OutputType {
-    fn run(&self, db: &mut DbHandle<Storage>) -> Self::Output;
+    fn run(&self, db: &DbHandle<Storage>) -> Self::Output;
 }

@@ -1,3 +1,8 @@
+# 0.4.2
+
+- Fixed a large bug preventing backdating from working in more cases. Due to this bug,
+inc-complete did not re-run the minimal number of dependencies previously.
+
 # 0.4.1
 
 - Added `impl<S: Default> Default for Db<S>`

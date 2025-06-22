@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use dashmap::DashMap;
 
 use crate::{Cell, storage::StorageFor};
@@ -7,7 +5,6 @@ use std::hash::Hash;
 
 use super::OutputType;
 
-#[derive(Clone)]
 pub struct DashMapStorage<K: OutputType + Eq + Hash> {
     key_to_cell: DashMap<K, Cell>,
     cell_to_key: DashMap<Cell, (K, Option<K::Output>)>,
@@ -25,7 +22,7 @@ impl<K: OutputType + Eq + Hash> Default for DashMapStorage<K> {
 impl<K> StorageFor<K> for DashMapStorage<K>
 where
     K: Clone + Eq + Hash + OutputType,
-    K::Output: Eq,
+    K::Output: Eq + Clone,
 {
     fn get_cell_for_computation(&self, key: &K) -> Option<Cell> {
         self.key_to_cell.get(key).map(|value| *value)
@@ -36,17 +33,18 @@ where
         self.cell_to_key.insert(cell, (key, None));
     }
 
-    fn get_input(&self, cell: Cell) -> &K {
-        &self.cell_to_key.get(&cell).unwrap().0
+    fn get_input(&self, cell: Cell) -> K {
+        self.cell_to_key.get(&cell).unwrap().0.clone()
     }
 
-    fn get_output(&self, cell: Cell) -> Option<&K::Output> {
-        self.cell_to_key.get(&cell).unwrap().1.as_ref()
+    fn get_output(&self, cell: Cell) -> Option<K::Output> {
+        self.cell_to_key.get(&cell).unwrap().1.clone()
     }
 
     fn update_output(&self, cell: Cell, new_value: K::Output) -> bool {
         let mut previous_output = self.cell_to_key.get_mut(&cell).unwrap();
-        let changed = previous_output.1
+        let changed = previous_output
+            .1
             .as_ref()
             .is_none_or(|value| *value != new_value);
         previous_output.1 = Some(new_value);

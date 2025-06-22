@@ -16,7 +16,8 @@ pub struct DbHandle<'db, S> {
 impl<'db, S> DbHandle<'db, S> {
     pub(crate) fn new(db: &'db Db<S>, current_operation: Cell) -> Self {
         // We're re-running a cell so remove any past dependencies
-        db.cells.get_mut(&current_operation)
+        db.cells
+            .get_mut(&current_operation)
             .unwrap()
             .dependencies
             .clear();
@@ -37,18 +38,15 @@ impl<'db, S> DbHandle<'db, S> {
 }
 
 impl<'db, S: Storage> DbHandle<'db, S> {
-    pub fn get<C: OutputType + ComputationId>(&self, compute: C) -> &C::Output
+    pub fn get<C: OutputType + ComputationId>(&self, compute: C) -> C::Output
     where
         S: StorageFor<C>,
     {
         // Register the dependency
         let dependency = self.db.get_or_insert_cell(compute);
-        self.db
-            .cells
-            .get_mut(&self.current_operation)
-            .unwrap()
-            .dependencies
-            .insert(dependency);
+        let mut cell = self.db.cells.get_mut(&self.current_operation).unwrap();
+        cell.dependencies.push(dependency);
+        drop(cell);
 
         // Fetch the current value of the dependency
         self.db.get_with_cell(dependency)

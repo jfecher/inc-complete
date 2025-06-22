@@ -62,7 +62,7 @@ impl<S: Storage> Db<S> {
     /// Inputs which have never been computed are also considered stale.
     ///
     /// This does not actually re-compute the input.
-    pub fn is_stale<C: OutputType>(&self, input: &C) -> bool
+    pub fn is_stale<C: OutputType>(&mut self, input: &C) -> bool
     where
         S: StorageFor<C>,
     {
@@ -77,17 +77,25 @@ impl<S: Storage> Db<S> {
     /// This does not actually re-compute the input.
     fn is_stale_cell(&self, cell: Cell) -> bool {
         let computation_id = self.cells.get(&cell).unwrap().computation_id;
+
         if self.storage.output_is_unset(cell, computation_id) {
             return true;
         }
 
         // if any dependency may have changed, this cell is stale
         let cell = self.cells.get(&cell).unwrap();
-        cell.dependencies.iter().any(|dependency_id| {
-            let dependency = self.cells.get(&dependency_id).unwrap();
+        let last_verified = cell.last_verified_version;
 
-            dependency.last_verified_version != self.version
-                || dependency.last_updated_version > cell.last_verified_version
+        // Dependencies need to be iterated in the order they were computed.
+        // Otherwise we may re-run a computation which does not need to be re-run.
+        // In the worst case this could even lead to panics - see the div0 test.
+        cell.dependencies.iter().any(|dependency_id| {
+            self.update_cell(*dependency_id);
+
+            // This cell is stale if the dependency has been updated since
+            // we last verified this cell
+            let dependency = self.cells.get(&dependency_id).unwrap();
+            dependency.last_updated_version > last_verified
         })
     }
 
@@ -124,7 +132,7 @@ impl<S: Storage> Db<S> {
     /// Note that this check is skipped when compiling in Release mode.
     pub fn update_input<C: OutputType>(&mut self, input: C, new_value: C::Output)
     where
-        C: std::fmt::Debug + ComputationId,
+        C: ComputationId,
         S: StorageFor<C>,
     {
         let cell_id = self.get_or_insert_cell(input);
@@ -154,16 +162,15 @@ impl<S: Storage> Db<S> {
     }
 
     #[cfg(test)]
-    pub(crate) fn unwrap_cell_value<C: OutputType>(&self, input: &C) -> dashmap::mapref::one::Ref<Cell, CellData>
+    pub(crate) fn unwrap_cell_value<C: OutputType>(&self, input: &C) -> CellData
     where
-        C: std::fmt::Debug,
         S: StorageFor<C>,
     {
         let cell = self
             .get_cell(input)
-            .unwrap_or_else(|| panic!("unwrap_cell_value: Expected cell for `{input:?}` to exist"));
+            .unwrap_or_else(|| panic!("unwrap_cell_value: Expected cell to exist"));
 
-        self.cells.get(&cell).unwrap()
+        self.cells.get(&cell).unwrap().clone()
     }
 
     /// Similar to `update_input` but runs the compute function
@@ -203,7 +210,7 @@ impl<S: Storage> Db<S> {
     /// necessary.
     ///
     /// This function can panic if the dynamic type of the value returned by `compute.run(..)` is not `T`.
-    pub fn get<C: OutputType + ComputationId>(&mut self, compute: C) -> &C::Output
+    pub fn get<C: OutputType + ComputationId>(&mut self, compute: C) -> C::Output
     where
         S: StorageFor<C>,
     {
@@ -215,7 +222,7 @@ impl<S: Storage> Db<S> {
     /// necessary.
     ///
     /// This function can panic if the dynamic type of the value returned by `compute.run(..)` is not `T`.
-    pub(crate) fn get_with_cell<Concrete: OutputType>(&self, cell_id: Cell) -> &Concrete::Output
+    pub(crate) fn get_with_cell<Concrete: OutputType>(&self, cell_id: Cell) -> Concrete::Output
     where
         S: StorageFor<Concrete>,
     {

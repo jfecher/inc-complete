@@ -49,7 +49,7 @@ define_intermediate!(2, A3 -> i32, Spreadsheet, |_, handle| {
 fn basic() {
     let mut db = Db::<Spreadsheet>::new();
     db.update_input(A1, 20);
-    let result = *db.get(A3);
+    let result = db.get(A3);
     assert_eq!(result, 23);
 }
 
@@ -62,8 +62,8 @@ fn basic() {
 fn no_recompute_basic() {
     let mut db = Db::<Spreadsheet>::new();
     db.update_input(A1, 20);
-    let result1 = *db.get(A3);
-    let result2 = *db.get(A3);
+    let result1 = db.get(A3);
+    let result2 = db.get(A3);
     assert_eq!(result1, 23);
     assert_eq!(result2, 23);
 

@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 #[derive(
     Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
 )]
@@ -12,12 +10,12 @@ impl Cell {
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub(crate) struct CellData {
     pub(crate) computation_id: u32,
     pub(crate) last_updated_version: u32,
     pub(crate) last_verified_version: u32,
-    pub(crate) dependencies: HashSet<Cell>,
+    pub(crate) dependencies: Vec<Cell>,
 }
 
 impl CellData {
@@ -26,7 +24,7 @@ impl CellData {
             computation_id,
             last_updated_version: 0,
             last_verified_version: 0,
-            dependencies: HashSet::default(),
+            dependencies: Vec::new(),
         }
     }
 }

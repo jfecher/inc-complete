@@ -38,19 +38,22 @@ struct Result;
 define_input!(0, Numerator -> i32, SafeDiv);
 define_input!(1, Denominator -> i32, SafeDiv);
 
-define_intermediate!(2, Division -> i32, SafeDiv, |_, handle: &mut DbHandle<SafeDiv>| {
-    *handle.get(Numerator) / *handle.get(Denominator)
+define_intermediate!(2, Division -> i32, SafeDiv, |_, handle: &DbHandle<SafeDiv>| {
+    println!("division");
+    handle.get(Numerator) / handle.get(Denominator)
 });
 
-define_intermediate!(3, DenominatorIs0 -> bool, SafeDiv, |_, handle: &mut DbHandle<SafeDiv>| {
-    *handle.get(Denominator) == 0
+define_intermediate!(3, DenominatorIs0 -> bool, SafeDiv, |_, handle: &DbHandle<SafeDiv>| {
+    println!("denominator is 0");
+    handle.get(Denominator) == 0
 });
 
-define_intermediate!(4, Result -> i32, SafeDiv, |_, handle: &mut DbHandle<SafeDiv>| {
-    if *handle.get(DenominatorIs0) {
+define_intermediate!(4, Result -> i32, SafeDiv, |_, handle: &DbHandle<SafeDiv>| {
+    println!("result");
+    if handle.get(DenominatorIs0) {
         0
     } else {
-        *handle.get(Division)
+        handle.get(Division)
     }
 });
 
@@ -62,7 +65,7 @@ fn from_scratch() {
     let mut db = SafeDivDb::new();
     db.update_input(Numerator, 6);
     db.update_input(Denominator, 0);
-    assert_eq!(0i32, *db.get(Result));
+    assert_eq!(0i32, db.get(Result));
 }
 
 #[test]
@@ -87,7 +90,9 @@ fn dynamic_dependency_not_run() {
     assert_eq!(db.version, START_VERSION + 2);
 
     // 6 / 2
-    assert_eq!(3i32, *db.get(Result));
+    assert_eq!(3i32, db.get(Result));
+
+    println!("\n");
 
     db.update_input(Denominator, 0);
     assert_eq!(db.version, START_VERSION + 3);
@@ -98,7 +103,7 @@ fn dynamic_dependency_not_run() {
     // If we did recalculate `Division` we would get a divide by zero error.
     //
     // Shouldn't get a divide by zero here
-    assert_eq!(0i32, *db.get(Result));
+    assert_eq!(0i32, db.get(Result));
 }
 
 /// Test that a dynamic dependency - such as Division for Result - is no longer
@@ -115,12 +120,12 @@ fn dynamic_dependency_removed() {
     db.update_input(Denominator, 2);
 
     // Compute with non-zero denominator so that Division is registered as a dependency
-    assert_eq!(*db.get(Result), 3);
+    assert_eq!(db.get(Result), 3);
     let divide_changed_version = db.version;
 
     // Re-run with Denominator = 0
     db.update_input(Denominator, 0);
-    assert_eq!(*db.get(Result), 0);
+    assert_eq!(db.get(Result), 0);
 
     let divide0_version = db.version;
     let result_cell = db.unwrap_cell_value(&Result);
@@ -136,7 +141,7 @@ fn dynamic_dependency_removed() {
     // If Division were still a dependency, updating Numerator would trigger
     // Division to be updated, which would also update Result.
     db.update_input(Numerator, 12);
-    assert!(*db.get(DenominatorIs0));
+    assert!(db.get(DenominatorIs0));
 
     // DenominatorIs0 was just verified, ensure that Result does not need to be recomputed.
     // If Division were still a dependency, we'd expect Result to be stale.

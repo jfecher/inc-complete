@@ -23,7 +23,7 @@ impl<K: OutputType> Default for HashMapStorage<K> {
 impl<K> StorageFor<K> for HashMapStorage<K>
 where
     K: Clone + Eq + Hash + OutputType,
-    K::Output: Eq,
+    K::Output: Eq + Clone,
 {
     fn get_cell_for_computation(&self, key: &K) -> Option<Cell> {
         self.key_to_cell.get(key).copied()
@@ -34,12 +34,12 @@ where
         self.cell_to_key.insert(cell, (key, None));
     }
 
-    fn get_input(&self, cell: Cell) -> &K {
-        &self.cell_to_key[&cell].0
+    fn get_input(&self, cell: Cell) -> K {
+        self.cell_to_key[&cell].0.clone()
     }
 
-    fn get_output(&self, cell: Cell) -> Option<&K::Output> {
-        self.cell_to_key[&cell].1.as_ref()
+    fn get_output(&self, cell: Cell) -> Option<K::Output> {
+        self.cell_to_key[&cell].1.clone()
     }
 
     fn update_output(&self, cell: Cell, new_value: K::Output) -> bool {

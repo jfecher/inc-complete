@@ -23,16 +23,16 @@
 //! Let's start by defining these types:
 //!
 //! ```
-//! #[derive(Clone, Debug)]
+//! #[derive(Clone)]
 //! struct A1;
 //!
-//! #[derive(Clone, Debug)]
+//! #[derive(Clone)]
 //! struct A2;
 //!
-//! #[derive(Clone, Debug)]
+//! #[derive(Clone)]
 //! struct B1;
 //!
-//! #[derive(Clone, Debug)]
+//! #[derive(Clone)]
 //! struct B2;
 //! ```
 //!
@@ -43,9 +43,9 @@
 //! implemented manually, but there is little advantage in doing so.
 //!
 //! ```
-//! # #[derive(Clone, Debug)]
+//! # #[derive(Clone)]
 //! # struct A1;
-//! # #[derive(Clone, Debug)]
+//! # #[derive(Clone)]
 //! # struct A2;
 //! # #[derive(Clone, PartialEq, Eq, Hash)]
 //! # struct B1;
@@ -60,12 +60,12 @@
 //! #     // These functions should be pure but we're going to cheat here to
 //! #     // make it obvious when a function is recomputed
 //! #     println!("Computing B1!");
-//! #     *db.get(A1) + 8
+//! #     db.get(A1) + 8
 //! # });
 //! # // Larger programs may wish to pass an existing function instead of a closure
 //! # define_intermediate!(3, B2 -> i64, Spreadsheet, |_b2, db| {
 //! #     println!("Computing B2!");
-//! #     *db.get(B1) + *db.get(A2)
+//! #     db.get(B1) + db.get(A2)
 //! # });
 //! use inc_complete::impl_storage;
 //!
@@ -89,8 +89,8 @@
 //! In this example, we're using `SingletonStorage` for all of our
 //! computations because all of `A1`, `A2`, `B1`, and `B2` are singleton values like `()` with
 //! only a single value in their type. This lets us store them with an `Option<T>` instead of a
-//! `HashMap<K, V>`. If you are unsure which storage type to choose, `HashMapStorage<T>` or
-//! `BTreeMapStorage<T>` are good defaults. Even if used on singletons they will give you correct
+//! `HashMap<K, V>`. If you are unsure which storage type to choose, `DashMapStorage<T>`
+//! is a good default. Even if used on singletons it will give you correct
 //! behavior, just with slightly worse performance than `SingletonStorage<T>`.
 //!
 //! Next, for `Input` types we now need to define:
@@ -102,9 +102,9 @@
 //!
 //! For both of these, we can use the `define_input!` macro:
 //! ```
-//! # #[derive(Clone, Debug)]
+//! # #[derive(Clone)]
 //! # struct A1;
-//! # #[derive(Clone, Debug)]
+//! # #[derive(Clone)]
 //! # struct A2;
 //! # #[derive(Clone, PartialEq, Eq, Hash)]
 //! # struct B1;
@@ -127,16 +127,16 @@
 //! #     b2: B2,
 //! # );
 //! # use inc_complete::define_intermediate;
-//! # define_intermediate!(2, B1 -> i64, Spreadsheet, |_b1: &B1, db: &mut DbHandle<Spreadsheet>| {
+//! # define_intermediate!(2, B1 -> i64, Spreadsheet, |_b1: &B1, db: &DbHandle<Spreadsheet>| {
 //! #     // These functions should be pure but we're going to cheat here to
 //! #     // make it obvious when a function is recomputed
 //! #     println!("Computing B1!");
-//! #     *db.get(A1) + 8
+//! #     db.get(A1) + 8
 //! # });
 //! # // Larger programs may wish to pass an existing function instead of a closure
 //! # define_intermediate!(3, B2 -> i64, Spreadsheet, |_b2, db| {
 //! #     println!("Computing B2!");
-//! #     *db.get(B1) + *db.get(A2)
+//! #     db.get(B1) + db.get(A2)
 //! # });
 //! use inc_complete::define_input;
 //!
@@ -149,9 +149,9 @@
 //! (which often store parameters as data) and a `DbHandle` object to query sub-computations with:
 //!
 //! ```
-//! # #[derive(Clone, Debug)]
+//! # #[derive(Clone)]
 //! # struct A1;
-//! # #[derive(Clone, Debug)]
+//! # #[derive(Clone)]
 //! # struct A2;
 //! # #[derive(Clone, PartialEq, Eq, Hash)]
 //! # struct B1;
@@ -177,17 +177,17 @@
 //! # define_input!(1, A2 -> i64, Spreadsheet);
 //! use inc_complete::{ define_intermediate, DbHandle };
 //!
-//! define_intermediate!(2, B1 -> i64, Spreadsheet, |_b1: &B1, db: &mut DbHandle<Spreadsheet>| {
+//! define_intermediate!(2, B1 -> i64, Spreadsheet, |_b1: &B1, db: &DbHandle<Spreadsheet>| {
 //!     // These functions should be pure but we're going to cheat here to
 //!     // make it obvious when a function is recomputed
 //!     println!("Computing B1!");
-//!     *db.get(A1) + 8
+//!     db.get(A1) + 8
 //! });
 //!
 //! // Larger programs may wish to pass an existing function instead of a closure
 //! define_intermediate!(3, B2 -> i64, Spreadsheet, |_b2, db| {
 //!     println!("Computing B2!");
-//!     *db.get(B1) + *db.get(A2)
+//!     db.get(B1) + db.get(A2)
 //! });
 //! ```
 //!
@@ -199,9 +199,9 @@
 //! inputs, and run our program:
 //!
 //! ```
-//! # #[derive(Clone, Debug)]
+//! # #[derive(Clone)]
 //! # struct A1;
-//! # #[derive(Clone, Debug)]
+//! # #[derive(Clone)]
 //! # struct A2;
 //! # #[derive(Clone, PartialEq, Eq, Hash)]
 //! # struct B1;
@@ -229,12 +229,12 @@
 //! #     // These functions should be pure but we're going to cheat here to
 //! #     // make it obvious when a function is recomputed
 //! #     println!("Computing B1!");
-//! #     *db.get(A1) + 8
+//! #     db.get(A1) + 8
 //! # });
 //! # // Larger programs may wish to pass an existing function instead of a closure
 //! # define_intermediate!(3, B2 -> i64, Spreadsheet, |_b2, db| {
 //! #     println!("Computing B2!");
-//! #     *db.get(B1) + *db.get(A2)
+//! #     db.get(B1) + db.get(A2)
 //! # });
 //! type SpreadsheetDb = inc_complete::Db<Spreadsheet>;
 //!
@@ -246,11 +246,11 @@
 //!     // Output:
 //!     // Computing B2!
 //!     // Computing B1!
-//!     let b2 = *db.get(B2);
+//!     let b2 = db.get(B2);
 //!     assert_eq!(b2, 24);
 //!
 //!     // No output, result of B2 is cached
-//!     let b2 = *db.get(B2);
+//!     let b2 = db.get(B2);
 //!     assert_eq!(b2, 24);
 //!
 //!     // Now lets update an input
@@ -260,23 +260,23 @@
 //!     // does not depend on A2 and does not get recomputed.
 //!     // Output:
 //!     // Computing B2!
-//!     let b2 = *db.get(B2);
+//!     let b2 = db.get(B2);
 //!     assert_eq!(b2, 30);
 //! }
 //! ```
 //!
 //! ...And that's it for basic usage! If you want to delve deeper you can manually implement
 //! `Storage` for your storage type or `StorageFor` to define a new storage type for a single input
-//! (like `SingletonStorage`, `HashMapStorage`, or `BTreeMapStorage` which inc-complete defines).
+//! (like `SingletonStorage` or `DashMapStorage` which inc-complete defines).
 //!
 //! This example did not show it but you can also use structs with fields in your computations, e.g:
 //!
 //! ```
-//! use inc_complete::{ storage::HashMapStorage, impl_storage, define_intermediate };
+//! use inc_complete::{ storage::DashMapStorage, impl_storage, define_intermediate };
 //!
 //! #[derive(Default)]
 //! struct MyStorageType {
-//!     fibs: HashMapStorage<Fibonacci>,
+//!     fibs: DashMapStorage<Fibonacci>,
 //! }
 //!
 //! impl_storage!(MyStorageType, fibs: Fibonacci);
@@ -291,7 +291,7 @@
 //!         x
 //!     } else {
 //!         // Not exponential time since each sub-computation will be cached!
-//!         *db.get(Fibonacci(x - 1)) + db.get(Fibonacci(x - 2))
+//!         db.get(Fibonacci(x - 1)) + db.get(Fibonacci(x - 2))
 //!     }
 //! });
 //! ```

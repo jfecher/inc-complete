@@ -22,8 +22,8 @@
 /// // to be used with a `Db<MyStorageType>` or `DbHandle<MyStorageType>`.
 /// // The type annotations on the closure are unnecessary.
 /// // We also may provide an existing function instead of a closure.
-/// define_intermediate!(1, Double -> i32, MyStorageType, |_: &Double, db: &mut DbHandle<MyStorageType>| {
-///     *db.get(MyInput) * 2
+/// define_intermediate!(1, Double -> i32, MyStorageType, |_: &Double, db: &DbHandle<MyStorageType>| {
+///     db.get(MyInput) * 2
 /// });
 /// ```
 #[macro_export]
@@ -42,10 +42,10 @@ macro_rules! define_intermediate {
 
         $(
         impl $crate::Run<$storage_type> for $type_name {
-            fn run(&self, db: &mut $crate::DbHandle<$storage_type>) -> $output_type {
+            fn run(&self, db: &$crate::DbHandle<$storage_type>) -> $output_type {
                 // The type annotation here makes it so that users don't have to annotate
                 // the arguments of `run_function`.
-                let f: fn(&Self, &mut $crate::DbHandle<$storage_type>) -> $output_type =
+                let f: fn(&Self, &$crate::DbHandle<$storage_type>) -> $output_type =
                     $run_function;
                 f(self, db)
             }
@@ -72,8 +72,8 @@ macro_rules! define_intermediate {
 /// # impl_storage!(MyStorageType, input:MyInput,double:Double);
 /// # #[derive(Clone)]
 /// # struct Double;
-/// # define_intermediate!(1, Double -> i32, MyStorageType, |_: &Double, db: &mut DbHandle<MyStorageType>| {
-/// #     *db.get(MyInput) * 2
+/// # define_intermediate!(1, Double -> i32, MyStorageType, |_: &Double, db: &DbHandle<MyStorageType>| {
+/// #     db.get(MyInput) * 2
 /// # });
 /// ##[derive(Clone)]
 /// struct MyInput;
@@ -97,7 +97,7 @@ macro_rules! define_input {
 
         $(
         impl $crate::Run<$storage_type> for $type_name {
-            fn run(&self, _: &mut $crate::DbHandle<$storage_type>) -> $output_type {
+            fn run(&self, _: &$crate::DbHandle<$storage_type>) -> $output_type {
                 panic!("Attempted to call `run` function on input {}, did you forget to call `update_input`?",
                     stringify!($type_name))
             }
@@ -115,12 +115,12 @@ macro_rules! define_input {
 /// Example usage:
 /// ```
 /// use inc_complete::{ impl_storage, define_input, define_intermediate };
-/// use inc_complete::storage::{ SingletonStorage, HashMapStorage };
+/// use inc_complete::storage::{ SingletonStorage, DashMapStorage };
 ///
 /// ##[derive(Default)]
 /// struct MyStorage {
 ///     foos: SingletonStorage<Foo>,
-///     bars: HashMapStorage<Bar>,
+///     bars: DashMapStorage<Bar>,
 /// }
 ///
 /// impl_storage!(MyStorage,
@@ -133,11 +133,11 @@ macro_rules! define_input {
 /// struct Foo;
 /// define_input!(0, Foo -> usize, MyStorage);
 ///
-/// // HashMapStorage requires Eq and Hash
+/// // DashMapStorage requires Eq and Hash
 /// ##[derive(Clone, PartialEq, Eq, Hash)]
 /// struct Bar(std::rc::Rc<String>);
 /// define_intermediate!(1, Bar -> usize, MyStorage, |bar, db| {
-///     bar.0.len() + *db.get(Foo)
+///     bar.0.len() + db.get(Foo)
 /// });
 /// ```
 ///
@@ -158,13 +158,13 @@ macro_rules! impl_storage {
                 }
             }
 
-            fn run_computation(db: &mut $crate::DbHandle<Self>, cell: $crate::Cell, computation_id: u32) -> bool {
+            fn run_computation(db: &$crate::DbHandle<Self>, cell: $crate::Cell, computation_id: u32) -> bool {
                 use $crate::{ StorageFor, Run };
                 match computation_id {
                     $(
                         x if x == <$computation_type as $crate::ComputationId>::computation_id() => {
-                            let new_value = db.storage().$field.get_input(cell).clone().run(db);
-                            db.storage_mut().$field.update_output(cell, new_value)
+                            let new_value = db.storage().$field.get_input(cell).run(db);
+                            db.storage().$field.update_output(cell, new_value)
                         }
                     )*
                     id => panic!("Unknown computation id: {id}"),
@@ -178,19 +178,19 @@ macro_rules! impl_storage {
                 self.$field.get_cell_for_computation(key)
             }
 
-            fn insert_new_cell(&mut self, cell: $crate::Cell, key: $computation_type) {
+            fn insert_new_cell(&self, cell: $crate::Cell, key: $computation_type) {
                 self.$field.insert_new_cell(cell, key)
             }
 
-            fn get_input(&self, cell: $crate::Cell) -> &$computation_type {
+            fn get_input(&self, cell: $crate::Cell) -> $computation_type {
                 self.$field.get_input(cell)
             }
 
-            fn get_output(&self, cell: $crate::Cell) -> Option<&<$computation_type as $crate::OutputType>::Output> {
+            fn get_output(&self, cell: $crate::Cell) -> Option<<$computation_type as $crate::OutputType>::Output> {
                 self.$field.get_output(cell)
             }
 
-            fn update_output(&mut self, cell: $crate::Cell, new_value: <$computation_type as $crate::OutputType>::Output) -> bool {
+            fn update_output(&self, cell: $crate::Cell, new_value: <$computation_type as $crate::OutputType>::Output) -> bool {
                 self.$field.update_output(cell, new_value)
             }
         })*
