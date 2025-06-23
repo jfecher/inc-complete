@@ -1,3 +1,4 @@
+#![cfg(not(feature = "async"))]
 use inc_complete::{
     Db, DbHandle, StorageFor, define_input, define_intermediate, impl_storage,
     storage::DashMapStorage,
@@ -108,7 +109,7 @@ fn still_cached_after_serialize() {
     assert_eq!(db.get(CountAs { name: half.clone() }), 10);
 
     let serialized = serde_json::to_string(&db).unwrap();
-    let mut new_db: Db<Storage> = serde_json::from_str(&serialized).unwrap();
+    let new_db: Db<Storage> = serde_json::from_str(&serialized).unwrap();
 
     assert!(!new_db.is_stale(&CountAs { name: half.clone() }));
     assert!(new_db.is_stale(&AsPlusBs { name: half.clone() }));
@@ -146,7 +147,7 @@ fn extend_preexisting_db_from_end() {
     let serialized = serde_json::to_string(&db).unwrap();
 
     // Deserializing a Db<Storage> here, not a Db<StorageWithoutAsPlusBs>!
-    let mut extended_db: Db<Storage> = serde_json::from_str(&serialized).unwrap();
+    let extended_db: Db<Storage> = serde_json::from_str(&serialized).unwrap();
 
     assert!(!extended_db.is_stale(&CountAs { name: half.clone() }));
     assert!(!extended_db.is_stale(&CountBs { name: half.clone() }));

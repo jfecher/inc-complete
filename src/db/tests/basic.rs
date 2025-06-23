@@ -69,7 +69,7 @@ fn no_recompute_basic() {
 
     // Only 1 input has been updated
     let expected_version = START_VERSION + 1;
-    assert_eq!(db.version, expected_version);
+    assert_eq!(db.version(), expected_version);
 
     let a1 = db.unwrap_cell_value(&A1);
     assert_eq!(a1.last_updated_version, expected_version);

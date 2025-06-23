@@ -38,9 +38,25 @@ impl<'db, S> DbHandle<'db, S> {
 }
 
 impl<'db, S: Storage> DbHandle<'db, S> {
+    #[cfg(not(feature = "async"))]
     pub fn get<C: OutputType + ComputationId>(&self, compute: C) -> C::Output
     where
         S: StorageFor<C>,
+    {
+        // Register the dependency
+        let dependency = self.db.get_or_insert_cell(compute);
+        let mut cell = self.db.cells.get_mut(&self.current_operation).unwrap();
+        cell.dependencies.push(dependency);
+        drop(cell);
+
+        // Fetch the current value of the dependency
+        self.db.get_with_cell(dependency)
+    }
+
+    #[cfg(feature = "async")]
+    pub fn get<C: OutputType + ComputationId>(&self, compute: C) -> impl Future<Output = C::Output> + Send
+    where
+        S: StorageFor<C> + Sync,
     {
         // Register the dependency
         let dependency = self.db.get_or_insert_cell(compute);

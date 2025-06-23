@@ -26,9 +26,9 @@
 ///     db.get(MyInput) * 2
 /// });
 /// ```
+#[cfg(not(feature = "async"))]
 #[macro_export]
 macro_rules! define_intermediate {
-    // Without the `->`, rustfmt has really bad formatting when calling this macro
     ( $id:tt, $type_name:ident -> $output_type:ty, $( $storage_type:ty )|+, $run_function:expr) => {
         impl $crate::OutputType for $type_name {
             type Output = $output_type;
@@ -48,6 +48,30 @@ macro_rules! define_intermediate {
                 let f: fn(&Self, &$crate::DbHandle<$storage_type>) -> $output_type =
                     $run_function;
                 f(self, db)
+            }
+        }
+        )+
+    };
+}
+
+#[cfg(feature = "async")]
+#[macro_export]
+macro_rules! define_intermediate {
+    ( $id:tt, $type_name:ident -> $output_type:ty, $( $storage_type:ty )|+, $run_function:expr) => {
+        impl $crate::OutputType for $type_name {
+            type Output = $output_type;
+        }
+
+        impl $crate::ComputationId for $type_name {
+            fn computation_id() -> u32 {
+                $id
+            }
+        }
+
+        $(
+        impl $crate::Run<$storage_type> for $type_name {
+            fn run<'db>(&self, db: &$crate::DbHandle<'db, $storage_type>) -> impl Future<Output = $output_type> {
+                $run_function(self, db)
             }
         }
         )+
@@ -158,18 +182,7 @@ macro_rules! impl_storage {
                 }
             }
 
-            fn run_computation(db: &$crate::DbHandle<Self>, cell: $crate::Cell, computation_id: u32) -> bool {
-                use $crate::{ StorageFor, Run };
-                match computation_id {
-                    $(
-                        x if x == <$computation_type as $crate::ComputationId>::computation_id() => {
-                            let new_value = db.storage().$field.get_input(cell).run(db);
-                            db.storage().$field.update_output(cell, new_value)
-                        }
-                    )*
-                    id => panic!("Unknown computation id: {id}"),
-                }
-            }
+            $crate::run_computation!( $($field: $computation_type),* );
         }
 
         $(
@@ -195,4 +208,44 @@ macro_rules! impl_storage {
             }
         })*
     };
+}
+
+#[cfg(not(feature = "async"))]
+#[doc(hidden)]
+#[macro_export]
+macro_rules! run_computation {
+    ( $($field:ident: $computation_type:ty),* ) => {
+        fn run_computation(db: &$crate::DbHandle<Self>, cell: $crate::Cell, computation_id: u32) -> bool {
+            use $crate::{ StorageFor, Run };
+            match computation_id {
+                $(
+                    x if x == <$computation_type as $crate::ComputationId>::computation_id() => {
+                        let new_value = db.storage().$field.get_input(cell).run(db);
+                        db.storage().$field.update_output(cell, new_value)
+                    }
+                )*
+                id => panic!("Unknown computation id: {id}"),
+            }
+        }
+    }
+}
+
+#[cfg(feature = "async")]
+#[doc(hidden)]
+#[macro_export]
+macro_rules! run_computation {
+    ( $($field:ident: $computation_type:ty),* ) => {
+        async fn run_computation<'db>(db: &$crate::DbHandle<'db, Self>, cell: $crate::Cell, computation_id: u32) -> bool {
+            use $crate::{ StorageFor, Run };
+            match computation_id {
+                $(
+                    x if x == <$computation_type as $crate::ComputationId>::computation_id() => {
+                        let new_value = db.storage().$field.get_input(cell).run(db).await;
+                        db.storage().$field.update_output(cell, new_value)
+                    }
+                )*
+                id => panic!("Unknown computation id: {id}"),
+            }
+        }
+    }
 }

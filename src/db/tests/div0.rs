@@ -87,7 +87,7 @@ fn dynamic_dependency_not_run() {
     db.update_input(Numerator, 6);
     db.update_input(Denominator, 2);
 
-    assert_eq!(db.version, START_VERSION + 2);
+    assert_eq!(db.version(), START_VERSION + 2);
 
     // 6 / 2
     assert_eq!(3i32, db.get(Result));
@@ -95,7 +95,7 @@ fn dynamic_dependency_not_run() {
     println!("\n");
 
     db.update_input(Denominator, 0);
-    assert_eq!(db.version, START_VERSION + 3);
+    assert_eq!(db.version(), START_VERSION + 3);
 
     // Although Division was previously a dependency of Result,
     // we shouldn't update Division due to the `DenominatorIs0` changing as well,
@@ -121,13 +121,13 @@ fn dynamic_dependency_removed() {
 
     // Compute with non-zero denominator so that Division is registered as a dependency
     assert_eq!(db.get(Result), 3);
-    let divide_changed_version = db.version;
+    let divide_changed_version = db.version();
 
     // Re-run with Denominator = 0
     db.update_input(Denominator, 0);
     assert_eq!(db.get(Result), 0);
 
-    let divide0_version = db.version;
+    let divide0_version = db.version();
     let result_cell = db.unwrap_cell_value(&Result);
     let result_last_verified = result_cell.last_verified_version;
     let result_last_updated = result_cell.last_updated_version;

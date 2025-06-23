@@ -1,3 +1,5 @@
+use std::sync::atomic::{AtomicU32, Ordering};
+
 use crate::cell::CellData;
 use crate::storage::{ComputationId, StorageFor};
 use crate::{Cell, OutputType, Storage};
@@ -16,7 +18,7 @@ const START_VERSION: u32 = 1;
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct Db<Storage> {
     cells: dashmap::DashMap<Cell, CellData>,
-    version: u32,
+    version: AtomicU32,
     storage: Storage,
 }
 
@@ -38,7 +40,7 @@ impl<S> Db<S> {
     pub fn with_storage(storage: S) -> Self {
         Self {
             cells: Default::default(),
-            version: START_VERSION,
+            version: AtomicU32::new(START_VERSION),
             storage,
         }
     }
@@ -58,47 +60,6 @@ impl<S> Db<S> {
 }
 
 impl<S: Storage> Db<S> {
-    /// True if a given input is stale and needs to be re-computed.
-    /// Inputs which have never been computed are also considered stale.
-    ///
-    /// This does not actually re-compute the input.
-    pub fn is_stale<C: OutputType>(&mut self, input: &C) -> bool
-    where
-        S: StorageFor<C>,
-    {
-        // If the cell doesn't exist, it is definitely stale
-        let Some(cell) = self.get_cell(input) else {
-            return true;
-        };
-        self.is_stale_cell(cell)
-    }
-
-    /// True if a given cell is stale and needs to be re-computed.
-    /// This does not actually re-compute the input.
-    fn is_stale_cell(&self, cell: Cell) -> bool {
-        let computation_id = self.cells.get(&cell).unwrap().computation_id;
-
-        if self.storage.output_is_unset(cell, computation_id) {
-            return true;
-        }
-
-        // if any dependency may have changed, this cell is stale
-        let cell = self.cells.get(&cell).unwrap();
-        let last_verified = cell.last_verified_version;
-
-        // Dependencies need to be iterated in the order they were computed.
-        // Otherwise we may re-run a computation which does not need to be re-run.
-        // In the worst case this could even lead to panics - see the div0 test.
-        cell.dependencies.iter().any(|dependency_id| {
-            self.update_cell(*dependency_id);
-
-            // This cell is stale if the dependency has been updated since
-            // we last verified this cell
-            let dependency = self.cells.get(&dependency_id).unwrap();
-            dependency.last_updated_version > last_verified
-        })
-    }
-
     /// Return the corresponding Cell for a given computation, if it exists.
     ///
     /// This will not update any values.
@@ -145,11 +106,11 @@ impl<S: Storage> Db<S> {
         let mut cell = self.cells.get_mut(&cell_id).unwrap();
 
         if changed {
-            self.version += 1;
-            cell.last_updated_version = self.version;
-            cell.last_verified_version = self.version;
+            let version = self.version.fetch_add(1, Ordering::Relaxed) + 1;
+            cell.last_updated_version = version;
+            cell.last_verified_version = version;
         } else {
-            cell.last_verified_version = self.version;
+            cell.last_verified_version = self.version.load(Ordering::Relaxed);
         }
     }
 
@@ -173,6 +134,55 @@ impl<S: Storage> Db<S> {
         self.cells.get(&cell).unwrap().clone()
     }
 
+    pub fn version(&self) -> u32 {
+        self.version.load(Ordering::Relaxed)
+    }
+}
+
+#[cfg(not(feature = "async"))]
+impl<S: Storage> Db<S> {
+    /// True if a given input is stale and needs to be re-computed.
+    /// Inputs which have never been computed are also considered stale.
+    ///
+    /// This does not actually re-compute the input.
+    pub fn is_stale<C: OutputType>(&self, input: &C) -> bool
+    where
+        S: StorageFor<C>,
+    {
+        // If the cell doesn't exist, it is definitely stale
+        let Some(cell) = self.get_cell(input) else {
+            return true;
+        };
+        self.is_stale_cell(cell)
+    }
+
+    /// True if a given cell is stale and needs to be re-computed.
+    ///
+    /// Note that this may re-compute some input
+    fn is_stale_cell(&self, cell: Cell) -> bool {
+        let computation_id = self.cells.get(&cell).unwrap().computation_id;
+
+        if self.storage.output_is_unset(cell, computation_id) {
+            return true;
+        }
+
+        // if any dependency may have changed, this cell is stale
+        let cell = self.cells.get(&cell).unwrap();
+        let last_verified = cell.last_verified_version;
+
+        // Dependencies need to be iterated in the order they were computed.
+        // Otherwise we may re-run a computation which does not need to be re-run.
+        // In the worst case this could even lead to panics - see the div0 test.
+        cell.dependencies.iter().any(|dependency_id| {
+            self.update_cell(*dependency_id);
+
+            // This cell is stale if the dependency has been updated since
+            // we last verified this cell
+            let dependency = self.cells.get(&dependency_id).unwrap();
+            dependency.last_updated_version > last_verified
+        })
+    }
+
     /// Similar to `update_input` but runs the compute function
     /// instead of accepting a given value. This also will not update
     /// `self.version`
@@ -183,10 +193,11 @@ impl<S: Storage> Db<S> {
         let changed = S::run_computation(&handle, cell_id, computation_id);
 
         let mut cell = self.cells.get_mut(&cell_id).unwrap();
-        cell.last_verified_version = self.version;
+        let version = self.version.load(Ordering::Relaxed);
+        cell.last_verified_version = version;
 
         if changed {
-            cell.last_updated_version = self.version;
+            cell.last_updated_version = version;
         }
     }
 
@@ -194,23 +205,26 @@ impl<S: Storage> Db<S> {
     /// dependencies.
     fn update_cell(&self, cell_id: Cell) {
         let last_verified_version = self.cells.get(&cell_id).unwrap().last_verified_version;
+        let version = self.version.load(Ordering::Relaxed);
 
-        if last_verified_version != self.version {
+        if last_verified_version != version {
             // if any dependency may have changed, update
             if self.is_stale_cell(cell_id) {
                 self.run_compute_function(cell_id);
             } else {
                 let mut cell = self.cells.get_mut(&cell_id).unwrap();
-                cell.last_verified_version = self.version;
+                cell.last_verified_version = version;
             }
         }
     }
 
+    /// Async version of `Db::get`
+    ///
     /// Retrieves the up to date value for the given computation, re-running any dependencies as
     /// necessary.
     ///
     /// This function can panic if the dynamic type of the value returned by `compute.run(..)` is not `T`.
-    pub fn get<C: OutputType + ComputationId>(&mut self, compute: C) -> C::Output
+    pub fn get<C: OutputType + ComputationId>(&self, compute: C) -> C::Output
     where
         S: StorageFor<C>,
     {
@@ -218,10 +232,7 @@ impl<S: Storage> Db<S> {
         self.get_with_cell::<C>(cell_id)
     }
 
-    /// Retrieves the up to date value for the given cell, re-running any dependencies as
-    /// necessary.
-    ///
-    /// This function can panic if the dynamic type of the value returned by `compute.run(..)` is not `T`.
+    /// A async version of `get_with_cell` which awaits if the given computation is not already computed.
     pub(crate) fn get_with_cell<Concrete: OutputType>(&self, cell_id: Cell) -> Concrete::Output
     where
         S: StorageFor<Concrete>,
@@ -231,5 +242,116 @@ impl<S: Storage> Db<S> {
         self.storage
             .get_output(cell_id)
             .expect("cell result should have been computed already")
+    }
+}
+
+#[cfg(feature = "async")]
+impl<S: Storage + Sync> Db<S> {
+    /// True if a given input is stale and needs to be re-computed.
+    /// Inputs which have never been computed are also considered stale.
+    ///
+    /// This does not actually re-compute the input.
+    pub async fn is_stale<C: OutputType>(&self, input: &C) -> bool
+    where
+        S: StorageFor<C>,
+    {
+        // If the cell doesn't exist, it is definitely stale
+        let Some(cell) = self.get_cell(input) else {
+            return true;
+        };
+        self.is_stale_cell(cell).await
+    }
+
+    /// True if a given cell is stale and needs to be re-computed.
+    ///
+    /// Note that this may re-compute some input
+    async fn is_stale_cell(&self, cell: Cell) -> bool {
+        let computation_id = self.cells.get(&cell).unwrap().computation_id;
+
+        if self.storage.output_is_unset(cell, computation_id) {
+            return true;
+        }
+
+        // if any dependency may have changed, this cell is stale
+        let cell = self.cells.get(&cell).unwrap();
+        let last_verified = cell.last_verified_version;
+
+        // Dependencies need to be iterated in the order they were computed.
+        // Otherwise we may re-run a computation which does not need to be re-run.
+        // In the worst case this could even lead to panics - see the div0 test.
+        for dependency_id in cell.dependencies.iter() {
+            self.update_cell(*dependency_id).await;
+
+            // This cell is stale if the dependency has been updated since
+            // we last verified this cell
+            let dependency = self.cells.get(&dependency_id).unwrap();
+            if dependency.last_updated_version > last_verified {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Similar to `update_input` but runs the compute function
+    /// instead of accepting a given value. This also will not update
+    /// `self.version`
+    async fn run_compute_function(&self, cell_id: Cell) {
+        let computation_id = self.cells.get(&cell_id).unwrap().computation_id;
+
+        let handle = self.handle(cell_id);
+        let changed = S::run_computation(&handle, cell_id, computation_id).await;
+
+        let mut cell = self.cells.get_mut(&cell_id).unwrap();
+        let version = self.version.load(Ordering::Relaxed);
+        cell.last_verified_version = version;
+
+        if changed {
+            cell.last_updated_version = version;
+        }
+    }
+
+    /// Trigger an update of the given cell, recursively checking and re-running any out of date
+    /// dependencies.
+    async fn update_cell(&self, cell_id: Cell) {
+        let last_verified_version = self.cells.get(&cell_id).unwrap().last_verified_version;
+        let version = self.version.load(Ordering::Relaxed);
+
+        if last_verified_version != version {
+            // if any dependency may have changed, update
+            if Box::pin(self.is_stale_cell(cell_id)).await {
+                self.run_compute_function(cell_id).await;
+            } else {
+                let mut cell = self.cells.get_mut(&cell_id).unwrap();
+                cell.last_verified_version = version;
+            }
+        }
+    }
+
+    /// Async version of `Db::get`
+    ///
+    /// Retrieves the up to date value for the given computation, re-running any dependencies as
+    /// necessary.
+    ///
+    /// This function can panic if the dynamic type of the value returned by `compute.run(..)` is not `T`.
+    pub fn get<C: OutputType + ComputationId>(&self, compute: C) -> impl Future<Output = C::Output>
+    where
+        S: StorageFor<C>,
+    {
+        let cell_id = self.get_or_insert_cell(compute);
+        self.get_with_cell::<C>(cell_id)
+    }
+
+    /// A async version of `get_with_cell` which awaits if the given computation is not already computed.
+    pub(crate) fn get_with_cell<Concrete: OutputType>(&self, cell_id: Cell) -> impl Future<Output = Concrete::Output> + Send
+    where
+        S: StorageFor<Concrete>,
+    {
+        async move {
+            self.update_cell(cell_id).await;
+
+            self.storage
+                .get_output(cell_id)
+                .expect("cell result should have been computed already")
+        }
     }
 }

@@ -1,3 +1,4 @@
+#![cfg(not(feature = "async"))]
 use std::{
     collections::{BTreeMap, BTreeSet},
     rc::Rc,
