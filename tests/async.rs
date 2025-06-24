@@ -1,10 +1,10 @@
 #![cfg(feature = "async")]
-use inc_complete::{define_intermediate, impl_storage, storage::HashMapStorage, Db, DbHandle};
+use inc_complete::{Db, DbHandle, define_intermediate, impl_storage, storage::HashMapStorage};
 
 #[derive(Default)]
 struct Context {
-    div4s: DashMapStorage<Div4>,
-    div_all: DashMapStorage<DivAll>,
+    div4s: HashMapStorage<Div4>,
+    div_all: HashMapStorage<DivAll>,
 }
 
 impl_storage!(Context,
@@ -17,7 +17,6 @@ struct Div4(u64);
 define_intermediate!(0, Div4 -> u64, Context, div4);
 
 async fn div4<'db>(this: &Div4, db: &DbHandle<'db, Context>) -> u64 {
-    println!("div({}) on thread {:?}", this.0, std::thread::current().id());
     if this.0 < 4 {
         0
     } else {
@@ -31,13 +30,11 @@ struct DivAll(u64, u64, u64, u64);
 define_intermediate!(1, DivAll -> u64, Context, div_all);
 
 async fn div_all<'c>(this: &DivAll, db: &DbHandle<'c, Context>) -> u64 {
-    println!("div_all");
-
     let mut a = 0;
     let mut b = 0;
     let mut c = 0;
     let mut d = 0;
-    let mut v = String::new();
+    // Is there a less awkward way of doing this?
     tokio_scoped::scope(|scope| {
         scope.spawn(async {
             let r = Box::pin(db.get(Div4(this.0))).await;
@@ -56,7 +53,10 @@ async fn div_all<'c>(this: &DivAll, db: &DbHandle<'c, Context>) -> u64 {
             d = r;
         });
     });
-    println!("{a}, {b}, {c}, {d}");
+    assert_eq!(a, 10);
+    assert_eq!(b, 10);
+    assert_eq!(c, 10);
+    assert_eq!(d, 10);
     a + b + c + d
 }
 
@@ -70,8 +70,6 @@ fn test_async_basic() {
             let db = Db::<Context>::new();
 
             let result = db.get(DivAll(40, 41, 42, 43)).await;
-            println!("{result}");
             assert_eq!(result, 40);
-            panic!();
         })
 }

@@ -19,6 +19,7 @@ const START_VERSION: u32 = 1;
 pub struct Db<Storage> {
     cells: scc::HashMap<Cell, CellData>,
     version: AtomicU32,
+    next_cell: AtomicU32,
     storage: Storage,
 }
 
@@ -41,6 +42,7 @@ impl<S> Db<S> {
         Self {
             cells: Default::default(),
             version: AtomicU32::new(START_VERSION),
+            next_cell: AtomicU32::new(0),
             storage,
         }
     }
@@ -80,8 +82,14 @@ impl<S: Storage> Db<S> {
         } else {
             let computation_id = C::computation_id();
 
-            let new_cell = Cell::new(self.cells.len() as u32);
-            self.cells.insert(new_cell, CellData::new(computation_id)).ok();
+            // We just need a unique ID here, we don't care about ordering between
+            // threads, so we're using Ordering::Relaxed.
+            let cell_id = self.next_cell.fetch_add(1, Ordering::Relaxed);
+            let new_cell = Cell::new(cell_id);
+
+            self.cells
+                .insert(new_cell, CellData::new(computation_id))
+                .ok();
             self.storage.insert_new_cell(new_cell, input);
             new_cell
         }
@@ -123,6 +131,7 @@ impl<S: Storage> Db<S> {
     }
 
     #[cfg(test)]
+    #[allow(unused)]
     pub(crate) fn unwrap_cell_value<C: OutputType>(&self, input: &C) -> CellData
     where
         S: StorageFor<C>,
@@ -183,9 +192,11 @@ impl<S: Storage> Db<S> {
 
             // This cell is stale if the dependency has been updated since
             // we last verified this cell
-            self.cells.read(dependency_id, |_, dependency| {
-                dependency.last_updated_version > last_verified
-            }).unwrap()
+            self.cells
+                .read(dependency_id, |_, dependency| {
+                    dependency.last_updated_version > last_verified
+                })
+                .unwrap()
         })
     }
 
@@ -218,10 +229,8 @@ impl<S: Storage> Db<S> {
             if self.is_stale_cell(cell_id) {
                 self.run_compute_function(cell_id);
             } else {
-                println!("Getting mut {:?}", cell_id);
                 let mut cell = self.cells.get(&cell_id).unwrap();
                 cell.last_verified_version = version;
-                println!("Releasing   {:?}", cell_id);
             }
         }
     }
@@ -274,26 +283,32 @@ impl<S: Storage + Sync> Db<S> {
     ///
     /// Note that this may re-compute some input
     async fn is_stale_cell(&self, cell: Cell) -> bool {
-        let computation_id = self.cells.get(&cell).unwrap().computation_id;
+        let computation_id = self.with_cell(cell, |data| data.computation_id);
 
         if self.storage.output_is_unset(cell, computation_id) {
             return true;
         }
 
         // if any dependency may have changed, this cell is stale
-        let cell = self.cells.get(&cell).unwrap();
-        let last_verified = cell.last_verified_version;
+        let (last_verified, dependencies) = self.with_cell(cell, |data| {
+            (data.last_verified_version, data.dependencies.clone())
+        });
 
         // Dependencies need to be iterated in the order they were computed.
         // Otherwise we may re-run a computation which does not need to be re-run.
         // In the worst case this could even lead to panics - see the div0 test.
-        for dependency_id in cell.dependencies.iter() {
-            self.update_cell(*dependency_id).await;
+        for dependency_id in dependencies {
+            self.update_cell(dependency_id).await;
 
             // This cell is stale if the dependency has been updated since
             // we last verified this cell
-            let dependency = self.cells.get(&dependency_id).unwrap();
-            if dependency.last_updated_version > last_verified {
+            if self
+                .cells
+                .read(&dependency_id, |_, dependency| {
+                    dependency.last_updated_version > last_verified
+                })
+                .unwrap()
+            {
                 return true;
             }
         }
@@ -304,13 +319,13 @@ impl<S: Storage + Sync> Db<S> {
     /// instead of accepting a given value. This also will not update
     /// `self.version`
     async fn run_compute_function(&self, cell_id: Cell) {
-        let computation_id = self.cells.get(&cell_id).unwrap().computation_id;
+        let computation_id = self.with_cell(cell_id, |data| data.computation_id);
 
         let handle = self.handle(cell_id);
         let changed = S::run_computation(&handle, cell_id, computation_id).await;
 
-        let mut cell = self.cells.get_mut(&cell_id).unwrap();
         let version = self.version.load(Ordering::SeqCst);
+        let mut cell = self.cells.get(&cell_id).unwrap();
         cell.last_verified_version = version;
 
         if changed {
@@ -321,7 +336,7 @@ impl<S: Storage + Sync> Db<S> {
     /// Trigger an update of the given cell, recursively checking and re-running any out of date
     /// dependencies.
     async fn update_cell(&self, cell_id: Cell) {
-        let last_verified_version = self.cells.get(&cell_id).unwrap().last_verified_version;
+        let last_verified_version = self.with_cell(cell_id, |data| data.last_verified_version);
         let version = self.version.load(Ordering::SeqCst);
 
         if last_verified_version != version {
@@ -329,7 +344,7 @@ impl<S: Storage + Sync> Db<S> {
             if Box::pin(self.is_stale_cell(cell_id)).await {
                 self.run_compute_function(cell_id).await;
             } else {
-                let mut cell = self.cells.get_mut(&cell_id).unwrap();
+                let mut cell = self.cells.get(&cell_id).unwrap();
                 cell.last_verified_version = version;
             }
         }
@@ -350,7 +365,10 @@ impl<S: Storage + Sync> Db<S> {
     }
 
     /// A async version of `get_with_cell` which awaits if the given computation is not already computed.
-    pub(crate) fn get_with_cell<Concrete: OutputType>(&self, cell_id: Cell) -> impl Future<Output = Concrete::Output> + Send
+    pub(crate) fn get_with_cell<Concrete: OutputType>(
+        &self,
+        cell_id: Cell,
+    ) -> impl Future<Output = Concrete::Output> + Send
     where
         S: StorageFor<Concrete>,
     {
