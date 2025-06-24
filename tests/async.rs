@@ -1,5 +1,5 @@
 #![cfg(feature = "async")]
-use inc_complete::{define_intermediate, impl_storage, storage::DashMapStorage, Db, DbHandle};
+use inc_complete::{define_intermediate, impl_storage, storage::HashMapStorage, Db, DbHandle};
 
 #[derive(Default)]
 struct Context {

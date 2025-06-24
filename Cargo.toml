@@ -14,7 +14,7 @@ documentation = "https://docs.rs/inc-complete"
 async = []
 
 [dependencies]
-dashmap = { version = "6.1", features = ["serde"] }
+scc = { version = "2.3.4", features = ["serde"] }
 serde = { version = "1.0", features = ["derive", "rc"] }
 
 [dev-dependencies]

@@ -6,7 +6,7 @@ use std::{
 
 use inc_complete::{
     Db, DbHandle, define_input, define_intermediate, impl_storage,
-    storage::{DashMapStorage, SingletonStorage},
+    storage::{HashMapStorage, SingletonStorage},
 };
 
 /// Test a somewhat more complex case with nested computations
@@ -18,8 +18,8 @@ use inc_complete::{
 struct Compiler {
     input: SingletonStorage<Input>,
     parse: SingletonStorage<Parse>,
-    check: DashMapStorage<Check>,
-    execute: DashMapStorage<Execute>,
+    check: HashMapStorage<Check>,
+    execute: HashMapStorage<Execute>,
     execute_all: SingletonStorage<ExecuteAll>,
 }
 

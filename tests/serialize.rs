@@ -1,15 +1,15 @@
 #![cfg(not(feature = "async"))]
 use inc_complete::{
     Db, DbHandle, StorageFor, define_input, define_intermediate, impl_storage,
-    storage::DashMapStorage,
+    storage::HashMapStorage,
 };
 use serde::{Deserialize, Serialize};
 
 #[derive(Default, Serialize, Deserialize)]
 struct StorageWithoutAsPlusBs {
-    strings: DashMapStorage<Strings>,
-    count_as: DashMapStorage<CountAs>,
-    count_bs: DashMapStorage<CountBs>,
+    strings: HashMapStorage<Strings>,
+    count_as: HashMapStorage<CountAs>,
+    count_bs: HashMapStorage<CountBs>,
 }
 
 impl_storage!(StorageWithoutAsPlusBs,
@@ -26,12 +26,12 @@ impl_storage!(StorageWithoutAsPlusBs,
 /// for json at least - this may depend on your exact serialization format.
 #[derive(Default, Serialize, Deserialize)]
 struct Storage {
-    strings: DashMapStorage<Strings>,
-    count_as: DashMapStorage<CountAs>,
-    count_bs: DashMapStorage<CountBs>,
+    strings: HashMapStorage<Strings>,
+    count_as: HashMapStorage<CountAs>,
+    count_bs: HashMapStorage<CountBs>,
 
     #[serde(default)]
-    as_plus_bs: DashMapStorage<AsPlusBs>,
+    as_plus_bs: HashMapStorage<AsPlusBs>,
 }
 
 impl_storage!(Storage,

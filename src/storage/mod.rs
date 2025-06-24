@@ -4,7 +4,7 @@ mod dashmapped;
 mod macros;
 mod singleton;
 
-pub use dashmapped::DashMapStorage;
+pub use dashmapped::HashMapStorage;
 pub use singleton::SingletonStorage;
 
 /// The Storage trait is implemented on a type which can cache all of the computations

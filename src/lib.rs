@@ -89,7 +89,7 @@
 //! In this example, we're using `SingletonStorage` for all of our
 //! computations because all of `A1`, `A2`, `B1`, and `B2` are singleton values like `()` with
 //! only a single value in their type. This lets us store them with an `Option<T>` instead of a
-//! `HashMap<K, V>`. If you are unsure which storage type to choose, `DashMapStorage<T>`
+//! `HashMap<K, V>`. If you are unsure which storage type to choose, `HashMapStorage<T>`
 //! is a good default. Even if used on singletons it will give you correct
 //! behavior, just with slightly worse performance than `SingletonStorage<T>`.
 //!
@@ -267,16 +267,16 @@
 //!
 //! ...And that's it for basic usage! If you want to delve deeper you can manually implement
 //! `Storage` for your storage type or `StorageFor` to define a new storage type for a single input
-//! (like `SingletonStorage` or `DashMapStorage` which inc-complete defines).
+//! (like `SingletonStorage` or `HashMapStorage` which inc-complete defines).
 //!
 //! This example did not show it but you can also use structs with fields in your computations, e.g:
 //!
 //! ```
-//! use inc_complete::{ storage::DashMapStorage, impl_storage, define_intermediate };
+//! use inc_complete::{ storage::HashMapStorage, impl_storage, define_intermediate };
 //!
 //! #[derive(Default)]
 //! struct MyStorageType {
-//!     fibs: DashMapStorage<Fibonacci>,
+//!     fibs: HashMapStorage<Fibonacci>,
 //! }
 //!
 //! impl_storage!(MyStorageType, fibs: Fibonacci);

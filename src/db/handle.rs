@@ -17,7 +17,7 @@ impl<'db, S> DbHandle<'db, S> {
     pub(crate) fn new(db: &'db Db<S>, current_operation: Cell) -> Self {
         // We're re-running a cell so remove any past dependencies
         db.cells
-            .get_mut(&current_operation)
+            .get(&current_operation)
             .unwrap()
             .dependencies
             .clear();
@@ -45,7 +45,7 @@ impl<'db, S: Storage> DbHandle<'db, S> {
     {
         // Register the dependency
         let dependency = self.db.get_or_insert_cell(compute);
-        let mut cell = self.db.cells.get_mut(&self.current_operation).unwrap();
+        let mut cell = self.db.cells.get(&self.current_operation).unwrap();
         cell.dependencies.push(dependency);
         drop(cell);
 

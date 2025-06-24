@@ -139,12 +139,12 @@ macro_rules! define_input {
 /// Example usage:
 /// ```
 /// use inc_complete::{ impl_storage, define_input, define_intermediate };
-/// use inc_complete::storage::{ SingletonStorage, DashMapStorage };
+/// use inc_complete::storage::{ SingletonStorage, HashMapStorage };
 ///
 /// ##[derive(Default)]
 /// struct MyStorage {
 ///     foos: SingletonStorage<Foo>,
-///     bars: DashMapStorage<Bar>,
+///     bars: HashMapStorage<Bar>,
 /// }
 ///
 /// impl_storage!(MyStorage,
@@ -157,7 +157,7 @@ macro_rules! define_input {
 /// struct Foo;
 /// define_input!(0, Foo -> usize, MyStorage);
 ///
-/// // DashMapStorage requires Eq and Hash
+/// // HashMapStorage requires Eq and Hash
 /// ##[derive(Clone, PartialEq, Eq, Hash)]
 /// struct Bar(std::rc::Rc<String>);
 /// define_intermediate!(1, Bar -> usize, MyStorage, |bar, db| {

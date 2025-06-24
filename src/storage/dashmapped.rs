@@ -1,16 +1,16 @@
-use dashmap::DashMap;
+use scc::HashMap;
 
 use crate::{Cell, storage::StorageFor};
 use std::hash::Hash;
 
 use super::OutputType;
 
-pub struct DashMapStorage<K: OutputType + Eq + Hash> {
-    key_to_cell: DashMap<K, Cell>,
-    cell_to_key: DashMap<Cell, (K, Option<K::Output>)>,
+pub struct HashMapStorage<K: OutputType + Eq + Hash> {
+    key_to_cell: HashMap<K, Cell>,
+    cell_to_key: HashMap<Cell, (K, Option<K::Output>)>,
 }
 
-impl<K: OutputType + Eq + Hash> Default for DashMapStorage<K> {
+impl<K: OutputType + Eq + Hash> Default for HashMapStorage<K> {
     fn default() -> Self {
         Self {
             key_to_cell: Default::default(),
@@ -19,7 +19,7 @@ impl<K: OutputType + Eq + Hash> Default for DashMapStorage<K> {
     }
 }
 
-impl<K> StorageFor<K> for DashMapStorage<K>
+impl<K> StorageFor<K> for HashMapStorage<K>
 where
     K: Clone + Eq + Hash + OutputType,
     K::Output: Eq + Clone,
@@ -29,8 +29,8 @@ where
     }
 
     fn insert_new_cell(&self, cell: Cell, key: K) {
-        self.key_to_cell.insert(key.clone(), cell);
-        self.cell_to_key.insert(cell, (key, None));
+        self.key_to_cell.insert(key.clone(), cell).ok();
+        self.cell_to_key.insert(cell, (key, None)).ok();
     }
 
     fn get_input(&self, cell: Cell) -> K {
@@ -42,7 +42,7 @@ where
     }
 
     fn update_output(&self, cell: Cell, new_value: K::Output) -> bool {
-        let mut previous_output = self.cell_to_key.get_mut(&cell).unwrap();
+        let mut previous_output = self.cell_to_key.get(&cell).unwrap();
         let changed = previous_output
             .1
             .as_ref()
@@ -52,7 +52,7 @@ where
     }
 }
 
-impl<K> serde::Serialize for DashMapStorage<K>
+impl<K> serde::Serialize for HashMapStorage<K>
 where
     K: serde::Serialize + OutputType + Eq + Hash,
     K::Output: serde::Serialize,
@@ -65,7 +65,7 @@ where
     }
 }
 
-impl<'de, K> serde::Deserialize<'de> for DashMapStorage<K>
+impl<'de, K> serde::Deserialize<'de> for HashMapStorage<K>
 where
     K: serde::Deserialize<'de> + Hash + Eq + OutputType + Clone,
     K::Output: serde::Deserialize<'de>,
@@ -74,14 +74,15 @@ where
     where
         D: serde::Deserializer<'de>,
     {
-        let cell_to_key: DashMap<Cell, (K, Option<K::Output>)> =
+        let cell_to_key: HashMap<Cell, (K, Option<K::Output>)> =
             serde::Deserialize::deserialize(deserializer)?;
 
-        let key_to_cell = cell_to_key
-            .iter()
-            .map(|entry| (entry.value().0.clone(), *entry.key()))
-            .collect();
-        Ok(DashMapStorage {
+        let key_to_cell = HashMap::new();
+        cell_to_key.scan(|k, v| {
+            key_to_cell.insert(v.0.clone(), *k).ok();
+        });
+
+        Ok(HashMapStorage {
             cell_to_key,
             key_to_cell,
         })

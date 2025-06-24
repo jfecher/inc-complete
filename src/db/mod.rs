@@ -17,7 +17,7 @@ const START_VERSION: u32 = 1;
 /// See the documentation for `impl_storage!`.
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct Db<Storage> {
-    cells: dashmap::DashMap<Cell, CellData>,
+    cells: scc::HashMap<Cell, CellData>,
     version: AtomicU32,
     storage: Storage,
 }
@@ -81,7 +81,7 @@ impl<S: Storage> Db<S> {
             let computation_id = C::computation_id();
 
             let new_cell = Cell::new(self.cells.len() as u32);
-            self.cells.insert(new_cell, CellData::new(computation_id));
+            self.cells.insert(new_cell, CellData::new(computation_id)).ok();
             self.storage.insert_new_cell(new_cell, input);
             new_cell
         }
@@ -103,19 +103,19 @@ impl<S: Storage> Db<S> {
         );
 
         let changed = self.storage.update_output(cell_id, new_value);
-        let mut cell = self.cells.get_mut(&cell_id).unwrap();
+        let mut cell = self.cells.get(&cell_id).unwrap();
 
         if changed {
-            let version = self.version.fetch_add(1, Ordering::Relaxed) + 1;
+            let version = self.version.fetch_add(1, Ordering::SeqCst) + 1;
             cell.last_updated_version = version;
             cell.last_verified_version = version;
         } else {
-            cell.last_verified_version = self.version.load(Ordering::Relaxed);
+            cell.last_verified_version = self.version.load(Ordering::SeqCst);
         }
     }
 
     fn is_input(&self, cell: Cell) -> bool {
-        self.cells.get(&cell).unwrap().dependencies.len() == 0
+        self.with_cell(cell, |cell| cell.dependencies.len() == 0)
     }
 
     fn handle(&self, cell: Cell) -> DbHandle<S> {
@@ -131,11 +131,15 @@ impl<S: Storage> Db<S> {
             .get_cell(input)
             .unwrap_or_else(|| panic!("unwrap_cell_value: Expected cell to exist"));
 
-        self.cells.get(&cell).unwrap().clone()
+        self.cells.read(&cell, |_, value| value.clone()).unwrap()
     }
 
     pub fn version(&self) -> u32 {
-        self.version.load(Ordering::Relaxed)
+        self.version.load(Ordering::SeqCst)
+    }
+
+    fn with_cell<R>(&self, cell: Cell, f: impl FnOnce(&CellData) -> R) -> R {
+        self.cells.read(&cell, |_, data| f(data)).unwrap()
     }
 }
 
@@ -160,26 +164,28 @@ impl<S: Storage> Db<S> {
     ///
     /// Note that this may re-compute some input
     fn is_stale_cell(&self, cell: Cell) -> bool {
-        let computation_id = self.cells.get(&cell).unwrap().computation_id;
+        let computation_id = self.with_cell(cell, |data| data.computation_id);
 
         if self.storage.output_is_unset(cell, computation_id) {
             return true;
         }
 
         // if any dependency may have changed, this cell is stale
-        let cell = self.cells.get(&cell).unwrap();
-        let last_verified = cell.last_verified_version;
+        let (last_verified, dependencies) = self.with_cell(cell, |data| {
+            (data.last_verified_version, data.dependencies.clone())
+        });
 
         // Dependencies need to be iterated in the order they were computed.
         // Otherwise we may re-run a computation which does not need to be re-run.
         // In the worst case this could even lead to panics - see the div0 test.
-        cell.dependencies.iter().any(|dependency_id| {
+        dependencies.iter().any(|dependency_id| {
             self.update_cell(*dependency_id);
 
             // This cell is stale if the dependency has been updated since
             // we last verified this cell
-            let dependency = self.cells.get(&dependency_id).unwrap();
-            dependency.last_updated_version > last_verified
+            self.cells.read(dependency_id, |_, dependency| {
+                dependency.last_updated_version > last_verified
+            }).unwrap()
         })
     }
 
@@ -187,13 +193,13 @@ impl<S: Storage> Db<S> {
     /// instead of accepting a given value. This also will not update
     /// `self.version`
     fn run_compute_function(&self, cell_id: Cell) {
-        let computation_id = self.cells.get(&cell_id).unwrap().computation_id;
+        let computation_id = self.with_cell(cell_id, |data| data.computation_id);
 
         let handle = self.handle(cell_id);
         let changed = S::run_computation(&handle, cell_id, computation_id);
 
-        let mut cell = self.cells.get_mut(&cell_id).unwrap();
-        let version = self.version.load(Ordering::Relaxed);
+        let version = self.version.load(Ordering::SeqCst);
+        let mut cell = self.cells.get(&cell_id).unwrap();
         cell.last_verified_version = version;
 
         if changed {
@@ -204,16 +210,18 @@ impl<S: Storage> Db<S> {
     /// Trigger an update of the given cell, recursively checking and re-running any out of date
     /// dependencies.
     fn update_cell(&self, cell_id: Cell) {
-        let last_verified_version = self.cells.get(&cell_id).unwrap().last_verified_version;
-        let version = self.version.load(Ordering::Relaxed);
+        let last_verified_version = self.with_cell(cell_id, |data| data.last_verified_version);
+        let version = self.version.load(Ordering::SeqCst);
 
         if last_verified_version != version {
             // if any dependency may have changed, update
             if self.is_stale_cell(cell_id) {
                 self.run_compute_function(cell_id);
             } else {
-                let mut cell = self.cells.get_mut(&cell_id).unwrap();
+                println!("Getting mut {:?}", cell_id);
+                let mut cell = self.cells.get(&cell_id).unwrap();
                 cell.last_verified_version = version;
+                println!("Releasing   {:?}", cell_id);
             }
         }
     }
@@ -302,7 +310,7 @@ impl<S: Storage + Sync> Db<S> {
         let changed = S::run_computation(&handle, cell_id, computation_id).await;
 
         let mut cell = self.cells.get_mut(&cell_id).unwrap();
-        let version = self.version.load(Ordering::Relaxed);
+        let version = self.version.load(Ordering::SeqCst);
         cell.last_verified_version = version;
 
         if changed {
@@ -314,7 +322,7 @@ impl<S: Storage + Sync> Db<S> {
     /// dependencies.
     async fn update_cell(&self, cell_id: Cell) {
         let last_verified_version = self.cells.get(&cell_id).unwrap().last_verified_version;
-        let version = self.version.load(Ordering::Relaxed);
+        let version = self.version.load(Ordering::SeqCst);
 
         if last_verified_version != version {
             // if any dependency may have changed, update
