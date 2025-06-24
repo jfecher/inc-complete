@@ -1,17 +1,16 @@
-use std::collections::HashMap;
+use scc::HashMap;
 
 use crate::{Cell, storage::StorageFor};
 use std::hash::Hash;
 
 use super::OutputType;
 
-#[derive(Clone)]
-pub struct HashMapStorage<K: OutputType> {
+pub struct HashMapStorage<K: OutputType + Eq + Hash> {
     key_to_cell: HashMap<K, Cell>,
     cell_to_key: HashMap<Cell, (K, Option<K::Output>)>,
 }
 
-impl<K: OutputType> Default for HashMapStorage<K> {
+impl<K: OutputType + Eq + Hash> Default for HashMapStorage<K> {
     fn default() -> Self {
         Self {
             key_to_cell: Default::default(),
@@ -26,35 +25,36 @@ where
     K::Output: Eq + Clone,
 {
     fn get_cell_for_computation(&self, key: &K) -> Option<Cell> {
-        self.key_to_cell.get(key).copied()
+        self.key_to_cell.get(key).map(|value| *value)
     }
 
     fn insert_new_cell(&self, cell: Cell, key: K) {
-        self.key_to_cell.insert(key.clone(), cell);
-        self.cell_to_key.insert(cell, (key, None));
+        self.key_to_cell.insert(key.clone(), cell).ok();
+        self.cell_to_key.insert(cell, (key, None)).ok();
     }
 
     fn get_input(&self, cell: Cell) -> K {
-        self.cell_to_key[&cell].0.clone()
+        self.cell_to_key.get(&cell).unwrap().0.clone()
     }
 
     fn get_output(&self, cell: Cell) -> Option<K::Output> {
-        self.cell_to_key[&cell].1.clone()
+        self.cell_to_key.get(&cell).unwrap().1.clone()
     }
 
     fn update_output(&self, cell: Cell, new_value: K::Output) -> bool {
-        let previous_output = &self.cell_to_key.get_mut(&cell).unwrap().1;
+        let mut previous_output = self.cell_to_key.get(&cell).unwrap();
         let changed = previous_output
+            .1
             .as_ref()
             .is_none_or(|value| *value != new_value);
-        *previous_output = Some(new_value);
+        previous_output.1 = Some(new_value);
         changed
     }
 }
 
 impl<K> serde::Serialize for HashMapStorage<K>
 where
-    K: serde::Serialize + OutputType,
+    K: serde::Serialize + OutputType + Eq + Hash,
     K::Output: serde::Serialize,
 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -76,10 +76,12 @@ where
     {
         let cell_to_key: HashMap<Cell, (K, Option<K::Output>)> =
             serde::Deserialize::deserialize(deserializer)?;
-        let key_to_cell = cell_to_key
-            .iter()
-            .map(|(cell, (key, _))| (key.clone(), *cell))
-            .collect();
+
+        let key_to_cell = HashMap::new();
+        cell_to_key.scan(|k, v| {
+            key_to_cell.insert(v.0.clone(), *k).ok();
+        });
+
         Ok(HashMapStorage {
             cell_to_key,
             key_to_cell,

@@ -6,6 +6,7 @@ use crate::{Cell, OutputType, Storage};
 
 mod handle;
 mod tests;
+mod serialize;
 
 pub use handle::DbHandle;
 
@@ -15,7 +16,6 @@ const START_VERSION: u32 = 1;
 ///
 /// To use this, a type implementing `Storage` is required to be provided.
 /// See the documentation for `impl_storage!`.
-#[derive(serde::Serialize, serde::Deserialize)]
 pub struct Db<Storage> {
     cells: scc::HashMap<Cell, CellData>,
     version: AtomicU32,
@@ -95,6 +95,30 @@ impl<S: Storage> Db<S> {
         }
     }
 
+    fn handle(&self, cell: Cell) -> DbHandle<S> {
+        DbHandle::new(self, cell)
+    }
+
+    #[cfg(test)]
+    #[allow(unused)]
+    pub(crate) fn unwrap_cell_value<C: OutputType>(&self, input: &C) -> CellData
+    where
+        S: StorageFor<C>,
+    {
+        let cell = self
+            .get_cell(input)
+            .unwrap_or_else(|| panic!("unwrap_cell_value: Expected cell to exist"));
+
+        self.cells.read(&cell, |_, value| value.clone()).unwrap()
+    }
+
+    pub fn version(&self) -> u32 {
+        self.version.load(Ordering::SeqCst)
+    }
+}
+
+#[cfg(not(feature = "async"))]
+impl<S: Storage> Db<S> {
     /// Updates an input with a new value
     ///
     /// Panics in debug mode if the input is not an input - ie. it has at least 1 dependency.
@@ -126,34 +150,6 @@ impl<S: Storage> Db<S> {
         self.with_cell(cell, |cell| cell.dependencies.len() == 0)
     }
 
-    fn handle(&self, cell: Cell) -> DbHandle<S> {
-        DbHandle::new(self, cell)
-    }
-
-    #[cfg(test)]
-    #[allow(unused)]
-    pub(crate) fn unwrap_cell_value<C: OutputType>(&self, input: &C) -> CellData
-    where
-        S: StorageFor<C>,
-    {
-        let cell = self
-            .get_cell(input)
-            .unwrap_or_else(|| panic!("unwrap_cell_value: Expected cell to exist"));
-
-        self.cells.read(&cell, |_, value| value.clone()).unwrap()
-    }
-
-    pub fn version(&self) -> u32 {
-        self.version.load(Ordering::SeqCst)
-    }
-
-    fn with_cell<R>(&self, cell: Cell, f: impl FnOnce(&CellData) -> R) -> R {
-        self.cells.read(&cell, |_, data| f(data)).unwrap()
-    }
-}
-
-#[cfg(not(feature = "async"))]
-impl<S: Storage> Db<S> {
     /// True if a given input is stale and needs to be re-computed.
     /// Inputs which have never been computed are also considered stale.
     ///
@@ -260,10 +256,45 @@ impl<S: Storage> Db<S> {
             .get_output(cell_id)
             .expect("cell result should have been computed already")
     }
+
+    fn with_cell<R>(&self, cell: Cell, f: impl FnOnce(&CellData) -> R) -> R {
+        self.cells.read(&cell, |_, data| f(data)).unwrap()
+    }
 }
 
 #[cfg(feature = "async")]
 impl<S: Storage + Sync> Db<S> {
+    /// Updates an input with a new value
+    ///
+    /// Panics in debug mode if the input is not an input - ie. it has at least 1 dependency.
+    /// Note that this check is skipped when compiling in Release mode.
+    pub async fn update_input<C: OutputType>(&mut self, input: C, new_value: C::Output)
+    where
+        C: ComputationId,
+        S: StorageFor<C>,
+    {
+        let cell_id = self.get_or_insert_cell(input);
+        debug_assert!(
+            self.is_input(cell_id).await,
+            "`update_input` given a non-input value. Inputs must have 0 dependencies",
+        );
+
+        let changed = self.storage.update_output(cell_id, new_value);
+        let mut cell = self.cells.get(&cell_id).unwrap();
+
+        if changed {
+            let version = self.version.fetch_add(1, Ordering::SeqCst) + 1;
+            cell.last_updated_version = version;
+            cell.last_verified_version = version;
+        } else {
+            cell.last_verified_version = self.version.load(Ordering::SeqCst);
+        }
+    }
+
+    fn is_input(&self, cell: Cell) -> impl Future<Output = bool> {
+        self.with_cell(cell, |cell| cell.dependencies.len() == 0)
+    }
+
     /// True if a given input is stale and needs to be re-computed.
     /// Inputs which have never been computed are also considered stale.
     ///
@@ -283,7 +314,7 @@ impl<S: Storage + Sync> Db<S> {
     ///
     /// Note that this may re-compute some input
     async fn is_stale_cell(&self, cell: Cell) -> bool {
-        let computation_id = self.with_cell(cell, |data| data.computation_id);
+        let computation_id = self.with_cell(cell, |data| data.computation_id).await;
 
         if self.storage.output_is_unset(cell, computation_id) {
             return true;
@@ -292,7 +323,7 @@ impl<S: Storage + Sync> Db<S> {
         // if any dependency may have changed, this cell is stale
         let (last_verified, dependencies) = self.with_cell(cell, |data| {
             (data.last_verified_version, data.dependencies.clone())
-        });
+        }).await;
 
         // Dependencies need to be iterated in the order they were computed.
         // Otherwise we may re-run a computation which does not need to be re-run.
@@ -319,13 +350,13 @@ impl<S: Storage + Sync> Db<S> {
     /// instead of accepting a given value. This also will not update
     /// `self.version`
     async fn run_compute_function(&self, cell_id: Cell) {
-        let computation_id = self.with_cell(cell_id, |data| data.computation_id);
+        let computation_id = self.with_cell(cell_id, |data| data.computation_id).await;
 
         let handle = self.handle(cell_id);
         let changed = S::run_computation(&handle, cell_id, computation_id).await;
 
         let version = self.version.load(Ordering::SeqCst);
-        let mut cell = self.cells.get(&cell_id).unwrap();
+        let mut cell = self.cells.get_async(&cell_id).await.unwrap();
         cell.last_verified_version = version;
 
         if changed {
@@ -336,7 +367,7 @@ impl<S: Storage + Sync> Db<S> {
     /// Trigger an update of the given cell, recursively checking and re-running any out of date
     /// dependencies.
     async fn update_cell(&self, cell_id: Cell) {
-        let last_verified_version = self.with_cell(cell_id, |data| data.last_verified_version);
+        let last_verified_version = self.with_cell(cell_id, |data| data.last_verified_version).await;
         let version = self.version.load(Ordering::SeqCst);
 
         if last_verified_version != version {
@@ -344,7 +375,7 @@ impl<S: Storage + Sync> Db<S> {
             if Box::pin(self.is_stale_cell(cell_id)).await {
                 self.run_compute_function(cell_id).await;
             } else {
-                let mut cell = self.cells.get(&cell_id).unwrap();
+                let mut cell = self.cells.get_async(&cell_id).await.unwrap();
                 cell.last_verified_version = version;
             }
         }
@@ -379,5 +410,9 @@ impl<S: Storage + Sync> Db<S> {
                 .get_output(cell_id)
                 .expect("cell result should have been computed already")
         }
+    }
+
+    async fn with_cell<R>(&self, cell: Cell, f: impl FnOnce(&CellData) -> R) -> R {
+        self.cells.read_async(&cell, |_, data| f(data)).await.unwrap()
     }
 }

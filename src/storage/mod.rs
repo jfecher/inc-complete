@@ -1,10 +1,10 @@
 use crate::{Cell, DbHandle};
 
-mod dashmapped;
+mod hashmapped;
 mod macros;
 mod singleton;
 
-pub use dashmapped::HashMapStorage;
+pub use hashmapped::HashMapStorage;
 pub use singleton::SingletonStorage;
 
 /// The Storage trait is implemented on a type which can cache all of the computations
