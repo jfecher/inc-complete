@@ -40,6 +40,13 @@ macro_rules! define_intermediate {
             }
         }
 
+        impl $type_name {
+            #[allow(unused)]
+            pub fn get(self, db: &impl $crate::DbGet<$type_name>) -> $output_type {
+                db.get(self)
+            }
+        }
+
         $(
         impl $crate::Run<$storage_type> for $type_name {
             fn run(&self, db: &$crate::DbHandle<$storage_type>) -> $output_type {
@@ -65,6 +72,13 @@ macro_rules! define_intermediate {
         impl $crate::ComputationId for $type_name {
             fn computation_id() -> u32 {
                 $id
+            }
+        }
+
+        impl $type_name {
+            #[allow(unused)]
+            pub fn get(self, db: &impl $crate::DbGet<$type_name>) -> impl Future<Output = $output_type> + Send {
+                db.get(self)
             }
         }
 
@@ -116,6 +130,18 @@ macro_rules! define_input {
         impl $crate::ComputationId for $type_name {
             fn computation_id() -> u32 {
                 $id
+            }
+        }
+
+        impl $type_name {
+            #[allow(unused)]
+            pub fn get(self, db: &impl $crate::DbGet<$type_name>) -> $output_type {
+                db.get(self)
+            }
+
+            #[allow(unused)]
+            pub fn set<S>(self, db: &mut $crate::Db<S>, value: $output_type) where S: $crate::Storage + $crate::StorageFor<$type_name> {
+                db.update_input(self, value);
             }
         }
 

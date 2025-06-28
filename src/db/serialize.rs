@@ -1,22 +1,23 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use serde::{ser::SerializeStruct, Deserialize};
+use serde::{Deserialize, ser::SerializeStruct};
 
-use crate::{cell::CellData, Cell};
+use crate::{Cell, cell::CellData};
 
 use super::Db;
 
-impl<Storage> serde::Serialize for Db<Storage> where
+impl<Storage> serde::Serialize for Db<Storage>
+where
     Storage: serde::Serialize,
 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer
+        S: serde::Serializer,
     {
         let mut cells = Vec::with_capacity(self.cells.len());
 
         self.cells.scan(|key, value| {
-            cells.push((key.clone(), value.clone()));
+            cells.push((*key, value.clone()));
         });
 
         let version = self.version.load(Ordering::SeqCst);
@@ -40,12 +41,13 @@ struct DbDeserialize<Storage> {
     storage: Storage,
 }
 
-impl<'de, Storage> serde::Deserialize<'de> for Db<Storage> where
+impl<'de, Storage> serde::Deserialize<'de> for Db<Storage>
+where
     Storage: serde::Deserialize<'de>,
 {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de>
+        D: serde::Deserializer<'de>,
     {
         let db = DbDeserialize::deserialize(deserializer)?;
 

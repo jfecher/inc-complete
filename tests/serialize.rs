@@ -1,14 +1,14 @@
 #![cfg(not(feature = "async"))]
 use inc_complete::{
     Db, DbHandle, StorageFor, define_input, define_intermediate, impl_storage,
-    storage::HashMapStorage,
+    storage::{HashMapStorage, TreeIndexStorage},
 };
 use serde::{Deserialize, Serialize};
 
 #[derive(Default, Serialize, Deserialize)]
 struct StorageWithoutAsPlusBs {
     strings: HashMapStorage<Strings>,
-    count_as: HashMapStorage<CountAs>,
+    count_as: TreeIndexStorage<CountAs>,
     count_bs: HashMapStorage<CountBs>,
 }
 
@@ -27,7 +27,7 @@ impl_storage!(StorageWithoutAsPlusBs,
 #[derive(Default, Serialize, Deserialize)]
 struct Storage {
     strings: HashMapStorage<Strings>,
-    count_as: HashMapStorage<CountAs>,
+    count_as: TreeIndexStorage<CountAs>,
     count_bs: HashMapStorage<CountBs>,
 
     #[serde(default)]
@@ -49,7 +49,7 @@ struct Strings {
 }
 
 define_intermediate!(1, CountAs -> usize, Storage | StorageWithoutAsPlusBs, count_as_impl);
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Ord, PartialOrd)]
 struct CountAs {
     name: String,
 }

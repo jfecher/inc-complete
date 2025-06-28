@@ -16,7 +16,7 @@ impl_storage!(Context,
 struct Div4(u64);
 define_intermediate!(0, Div4 -> u64, Context, div4);
 
-fn div4<'db>(this: &Div4, db: &DbHandle<'db, Context>) -> u64 {
+fn div4(this: &Div4, db: &DbHandle<Context>) -> u64 {
     if this.0 < 4 {
         0
     } else {
@@ -28,13 +28,18 @@ fn div4<'db>(this: &Div4, db: &DbHandle<'db, Context>) -> u64 {
 struct DivAll(u64, u64, u64, u64);
 define_intermediate!(1, DivAll -> u64, Context, div_all);
 
-fn div_all<'c>(this: &DivAll, db: &DbHandle<'c, Context>) -> u64 {
+fn div_all(this: &DivAll, db: &DbHandle<Context>) -> u64 {
     let (a, b, c, d) = std::thread::scope(|scope| {
         let a = scope.spawn(|| db.get(Div4(this.0)));
         let b = scope.spawn(|| db.get(Div4(this.1)));
         let c = scope.spawn(|| db.get(Div4(this.2)));
         let d = scope.spawn(|| db.get(Div4(this.3)));
-        (a.join().unwrap(), b.join().unwrap(), c.join().unwrap(), d.join().unwrap())
+        (
+            a.join().unwrap(),
+            b.join().unwrap(),
+            c.join().unwrap(),
+            d.join().unwrap(),
+        )
     });
     assert_eq!(a, 10);
     assert_eq!(b, 10);

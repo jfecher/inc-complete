@@ -3,6 +3,8 @@ use crate::{
     storage::{ComputationId, StorageFor},
 };
 
+use super::DbGet;
+
 /// A handle to the database during some operation.
 ///
 /// This wraps calls to the Db so that any `get` calls
@@ -37,7 +39,7 @@ impl<'db, S> DbHandle<'db, S> {
     }
 }
 
-impl<'db, S: Storage> DbHandle<'db, S> {
+impl<S: Storage> DbHandle<'_, S> {
     #[cfg(not(feature = "async"))]
     pub fn get<C: OutputType + ComputationId>(&self, compute: C) -> C::Output
     where
@@ -69,5 +71,25 @@ impl<'db, S: Storage> DbHandle<'db, S> {
 
         // Fetch the current value of the dependency
         self.db.get_with_cell(dependency)
+    }
+}
+
+#[cfg(not(feature = "async"))]
+impl<'db, S, C> DbGet<C> for DbHandle<'db, S> where
+    C: OutputType + ComputationId,
+    S: Storage + StorageFor<C>
+{
+    fn get(&self, key: C) -> C::Output {
+        self.get(key)
+    }
+}
+
+#[cfg(feature = "async")]
+impl<'db, S, C> DbGet<C> for DbHandle<'db, S> where
+    C: OutputType + ComputationId,
+    S: Storage + StorageFor<C> + Sync
+{
+    fn get(&self, key: C) -> impl Future<Output = C::Output> + Send {
+        self.get(key)
     }
 }

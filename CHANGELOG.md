@@ -1,3 +1,18 @@
+# 0.5.0
+
+0.5.0 Adds support for multithreading and an experimental `async` feature.
+
+## Breaking:
+
+- Traits now require a `&DbHandle<Storage>` instead of a `&mut DbHandle<Storage>`
+- `StorageFor` methods must return keys/values by value rather than reference now.
+- `BTreeMapStorage` has been removed. Storage must be thread-safe now
+
+## Non-breaking:
+
+- `TreeIndexStorage` has been added backed by two `scc::TreeIndex`. It is a read-optimized
+  storage which may be performant if you expect your computation not to change often.
+
 # 0.4.2
 
 - Fixed a large bug preventing backdating from working in more cases. Due to this bug,

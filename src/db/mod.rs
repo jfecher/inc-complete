@@ -5,8 +5,8 @@ use crate::storage::{ComputationId, StorageFor};
 use crate::{Cell, OutputType, Storage};
 
 mod handle;
-mod tests;
 mod serialize;
+mod tests;
 
 pub use handle::DbHandle;
 
@@ -33,6 +33,37 @@ impl<Storage: Default> Db<Storage> {
 impl<S: Default> Default for Db<S> {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Abstracts over the `get` function provided by `Db<S>` and `DbHandle<S>` to avoid
+/// providing `get` and `get_db` variants for each function.
+#[cfg(not(feature = "async"))]
+pub trait DbGet<C: OutputType> {
+    fn get(&self, key: C) -> C::Output;
+}
+#[cfg(feature = "async")]
+pub trait DbGet<C: OutputType> {
+    fn get(&self, key: C) -> impl Future<Output = C::Output> + Send;
+}
+
+#[cfg(not(feature = "async"))]
+impl<S, C> DbGet<C> for Db<S> where
+    C: OutputType + ComputationId,
+    S: Storage + StorageFor<C>
+{
+    fn get(&self, key: C) -> C::Output {
+        self.get(key)
+    }
+}
+
+#[cfg(feature = "async")]
+impl<S, C> DbGet<C> for Db<S> where
+    C: OutputType + ComputationId,
+    S: Storage + StorageFor<C> + Sync
+{
+    fn get(&self, key: C) -> impl Future<Output = C::Output> + Send {
+        Db::get(self, key)
     }
 }
 
@@ -121,11 +152,15 @@ impl<S: Storage> Db<S> {
 impl<S: Storage> Db<S> {
     /// Updates an input with a new value
     ///
+    /// This requires an exclusive reference to self to ensure that there are no currently
+    /// running queries. Updating an input while an incremental computation is occurring
+    /// can break soundness for dependency tracking.
+    ///
     /// Panics in debug mode if the input is not an input - ie. it has at least 1 dependency.
     /// Note that this check is skipped when compiling in Release mode.
-    pub fn update_input<C: OutputType>(&mut self, input: C, new_value: C::Output)
+    pub fn update_input<C>(&mut self, input: C, new_value: C::Output)
     where
-        C: ComputationId,
+        C: OutputType + ComputationId,
         S: StorageFor<C>,
     {
         let cell_id = self.get_or_insert_cell(input);
@@ -147,13 +182,13 @@ impl<S: Storage> Db<S> {
     }
 
     fn is_input(&self, cell: Cell) -> bool {
-        self.with_cell(cell, |cell| cell.dependencies.len() == 0)
+        self.with_cell(cell, |cell| cell.dependencies.is_empty())
     }
 
-    /// True if a given input is stale and needs to be re-computed.
-    /// Inputs which have never been computed are also considered stale.
+    /// True if a given computation is stale and needs to be re-computed.
+    /// Computations which have never been computed are also considered stale.
     ///
-    /// This does not actually re-compute the input.
+    /// Note that this may re-compute dependencies of the given computation.
     pub fn is_stale<C: OutputType>(&self, input: &C) -> bool
     where
         S: StorageFor<C>,
@@ -321,9 +356,11 @@ impl<S: Storage + Sync> Db<S> {
         }
 
         // if any dependency may have changed, this cell is stale
-        let (last_verified, dependencies) = self.with_cell(cell, |data| {
-            (data.last_verified_version, data.dependencies.clone())
-        }).await;
+        let (last_verified, dependencies) = self
+            .with_cell(cell, |data| {
+                (data.last_verified_version, data.dependencies.clone())
+            })
+            .await;
 
         // Dependencies need to be iterated in the order they were computed.
         // Otherwise we may re-run a computation which does not need to be re-run.
@@ -367,7 +404,9 @@ impl<S: Storage + Sync> Db<S> {
     /// Trigger an update of the given cell, recursively checking and re-running any out of date
     /// dependencies.
     async fn update_cell(&self, cell_id: Cell) {
-        let last_verified_version = self.with_cell(cell_id, |data| data.last_verified_version).await;
+        let last_verified_version = self
+            .with_cell(cell_id, |data| data.last_verified_version)
+            .await;
         let version = self.version.load(Ordering::SeqCst);
 
         if last_verified_version != version {
@@ -413,6 +452,9 @@ impl<S: Storage + Sync> Db<S> {
     }
 
     async fn with_cell<R>(&self, cell: Cell, f: impl FnOnce(&CellData) -> R) -> R {
-        self.cells.read_async(&cell, |_, data| f(data)).await.unwrap()
+        self.cells
+            .read_async(&cell, |_, data| f(data))
+            .await
+            .unwrap()
     }
 }

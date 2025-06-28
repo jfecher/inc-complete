@@ -314,5 +314,5 @@ mod db;
 mod interned;
 
 pub use cell::Cell;
-pub use db::{Db, DbHandle};
+pub use db::{Db, DbHandle, DbGet};
 pub use storage::{ComputationId, OutputType, Run, Storage, StorageFor};
