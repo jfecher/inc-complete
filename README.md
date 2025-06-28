@@ -22,13 +22,14 @@ the format is not currently stable across releases of inc-complete.
 - [x] Load from disk
   - Manual save and load to disk to restart from where the previous program run left off.
   - Just serialize and deserialize the central `Db` object.
+- [x] Thread-safe
 
 ## Planned Features & Roadmap
 
+- [ ] Accumulator abstraction for collecting lists of items across computations (useful for compiler errors)
 - [ ] Support for interning arbitrary data
 - [ ] Cyclical dependency check for debugging
 - [ ] Manually invoked garbage collection for old cached computation results
-- [ ] Thread-safe with helpers to query multiple dependencies and update them on separate threads
 
 ## Quick Start
 
