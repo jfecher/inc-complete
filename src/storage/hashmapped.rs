@@ -54,14 +54,20 @@ where
 
 impl<K> serde::Serialize for HashMapStorage<K>
 where
-    K: serde::Serialize + OutputType + Eq + Hash,
-    K::Output: serde::Serialize,
+    K: serde::Serialize + OutputType + Eq + Hash + Clone,
+    K::Output: serde::Serialize + Clone,
 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
-        self.cell_to_key.serialize(serializer)
+        let mut cell_to_key_vec: Vec<(Cell, (K, Option<K::Output>))> = Vec::with_capacity(self.cell_to_key.len());
+
+        self.cell_to_key.scan(|cell, (key, value)| {
+            cell_to_key_vec.push((*cell, (key.clone(), value.clone())));
+        });
+
+        cell_to_key_vec.serialize(serializer)
     }
 }
 
@@ -74,17 +80,16 @@ where
     where
         D: serde::Deserializer<'de>,
     {
-        let cell_to_key: HashMap<Cell, (K, Option<K::Output>)> =
-            serde::Deserialize::deserialize(deserializer)?;
+        let cell_to_key_vec: Vec<(Cell, (K, Option<K::Output>))> = serde::Deserialize::deserialize(deserializer)?;
 
         let key_to_cell = HashMap::new();
-        cell_to_key.scan(|k, v| {
-            key_to_cell.insert(v.0.clone(), *k).ok();
-        });
+        let cell_to_key = HashMap::new();
 
-        Ok(HashMapStorage {
-            cell_to_key,
-            key_to_cell,
-        })
+        for (cell, (key, value)) in cell_to_key_vec {
+            key_to_cell.insert(key.clone(), cell).ok();
+            cell_to_key.insert(cell, (key, value)).ok();
+        }
+
+        Ok(HashMapStorage { cell_to_key, key_to_cell })
     }
 }

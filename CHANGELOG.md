@@ -2,16 +2,30 @@
 
 0.5.0 Adds support for multithreading and an experimental `async` feature.
 
+Aside from some breaking changes, the transition from 0.4.2 to 0.5.0 is expected
+to be relatively smooth since computations were already required to be pure.
+
 ## Breaking:
 
+- `Db` serialization post 0.5.0 is not compatible with older versions of this library
 - Traits now require a `&DbHandle<Storage>` instead of a `&mut DbHandle<Storage>`
 - `StorageFor` methods must return keys/values by value rather than reference now.
 - `BTreeMapStorage` has been removed. Storage must be thread-safe now
+- `HashMapStorage` is serialized as a `Vec` now for more compatibility with libraries
+  such as serde-json which only support maps with string keys.
+- `define_input!` and `define_intermediate!` now defines a `get` method on the computation
+  type. So as an alternative to `db.get(Type)` you can now call `Type.get(db)`. This will conflict
+  with any existing `get` method on the type.
+- `define_input!` now defines a `set` method on the computation type. So as an alternative to
+  `db.update_input(Type, value)` you can now call `Type.set(db, value)`. This will conflict with
+  any existing `set` method on the type.
 
 ## Non-breaking:
 
 - `TreeIndexStorage` has been added backed by two `scc::TreeIndex`. It is a read-optimized
-  storage which may be performant if you expect your computation not to change often.
+  storage which may be performant if you expect your computation not to change often. `TreeIndexStorage`
+  is serialized as a `Vec`.
+- `DbGet` trait has been added to abstract over `Db::get` and `DbHandle::get`.
 
 # 0.4.2
 

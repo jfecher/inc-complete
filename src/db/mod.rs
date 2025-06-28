@@ -156,15 +156,14 @@ impl<S: Storage> Db<S> {
     /// running queries. Updating an input while an incremental computation is occurring
     /// can break soundness for dependency tracking.
     ///
-    /// Panics in debug mode if the input is not an input - ie. it has at least 1 dependency.
-    /// Note that this check is skipped when compiling in Release mode.
+    /// Panics if the given computation is not an input - ie. panics if it has at least 1 dependency.
     pub fn update_input<C>(&mut self, input: C, new_value: C::Output)
     where
         C: OutputType + ComputationId,
         S: StorageFor<C>,
     {
         let cell_id = self.get_or_insert_cell(input);
-        debug_assert!(
+        assert!(
             self.is_input(cell_id),
             "`update_input` given a non-input value. Inputs must have 0 dependencies",
         );
