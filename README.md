@@ -34,3 +34,5 @@ the format is not currently stable across releases of inc-complete.
 ## Quick Start
 
 See the [docs for a quick start explanation](https://docs.rs/inc-complete/latest/inc_complete/) on how to use this library.
+
+Also see https://github.com/jfecher/modern-compiler-architecture for a full example of an incremental and concurrent compiler using inc-complete.
