@@ -1,3 +1,7 @@
+# 0.5.1
+
+- Switched to `rustc-hash` as the default hasher for `HashMapStorage`
+
 # 0.5.0
 
 0.5.0 Adds support for multithreading and an experimental `async` feature.

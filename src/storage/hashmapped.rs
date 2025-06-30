@@ -6,8 +6,8 @@ use std::hash::Hash;
 use super::OutputType;
 
 pub struct HashMapStorage<K: OutputType + Eq + Hash> {
-    key_to_cell: HashMap<K, Cell>,
-    cell_to_key: HashMap<Cell, (K, Option<K::Output>)>,
+    key_to_cell: HashMap<K, Cell, rustc_hash::FxBuildHasher>,
+    cell_to_key: HashMap<Cell, (K, Option<K::Output>), rustc_hash::FxBuildHasher>,
 }
 
 impl<K: OutputType + Eq + Hash> Default for HashMapStorage<K> {
@@ -82,8 +82,8 @@ where
     {
         let cell_to_key_vec: Vec<(Cell, (K, Option<K::Output>))> = serde::Deserialize::deserialize(deserializer)?;
 
-        let key_to_cell = HashMap::new();
-        let cell_to_key = HashMap::new();
+        let key_to_cell = HashMap::default();
+        let cell_to_key = HashMap::default();
 
         for (cell, (key, value)) in cell_to_key_vec {
             key_to_cell.insert(key.clone(), cell).ok();
