@@ -1,3 +1,7 @@
+# 0.5.2
+
+- Allow specifying a custom `BuildHasher` for `HashMapStorage`. This defaults to `rustc_hash::FxBuildHasher` if unspecified.
+
 # 0.5.1
 
 - Switched to `rustc-hash` as the default hasher for `HashMapStorage`

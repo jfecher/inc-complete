@@ -4,7 +4,7 @@ use crate::{Cell, storage::StorageFor};
 
 use super::OutputType;
 
-/// BTreeMapStorage is backed internally by a `scc::TreeIndex`,
+/// TreeIndexStorage is backed internally by a `scc::TreeIndex`,
 /// a type optimized for read-heavy workloads. See [scc's documentation](https://docs.rs/scc/2.3.4/scc/#treeindex)
 /// for performance details.
 pub struct TreeIndexStorage<K: OutputType> {

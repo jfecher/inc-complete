@@ -1,16 +1,22 @@
 use scc::HashMap;
 
 use crate::{Cell, storage::StorageFor};
-use std::hash::Hash;
+use std::hash::{BuildHasher, Hash};
 
 use super::OutputType;
 
-pub struct HashMapStorage<K: OutputType + Eq + Hash> {
-    key_to_cell: HashMap<K, Cell, rustc_hash::FxBuildHasher>,
-    cell_to_key: HashMap<Cell, (K, Option<K::Output>), rustc_hash::FxBuildHasher>,
+pub struct HashMapStorage<K, Hasher = rustc_hash::FxBuildHasher> where
+    K: OutputType + Eq + Hash,
+    Hasher: BuildHasher,
+{
+    key_to_cell: HashMap<K, Cell, Hasher>,
+    cell_to_key: HashMap<Cell, (K, Option<K::Output>), Hasher>,
 }
 
-impl<K: OutputType + Eq + Hash> Default for HashMapStorage<K> {
+impl<K, H> Default for HashMapStorage<K, H> where
+    K: OutputType + Eq + Hash,
+    H: Default + BuildHasher,
+{
     fn default() -> Self {
         Self {
             key_to_cell: Default::default(),
@@ -19,10 +25,11 @@ impl<K: OutputType + Eq + Hash> Default for HashMapStorage<K> {
     }
 }
 
-impl<K> StorageFor<K> for HashMapStorage<K>
+impl<K, H> StorageFor<K> for HashMapStorage<K, H>
 where
     K: Clone + Eq + Hash + OutputType,
     K::Output: Eq + Clone,
+    H: BuildHasher,
 {
     fn get_cell_for_computation(&self, key: &K) -> Option<Cell> {
         self.key_to_cell.get(key).map(|value| *value)
@@ -52,10 +59,11 @@ where
     }
 }
 
-impl<K> serde::Serialize for HashMapStorage<K>
+impl<K, H> serde::Serialize for HashMapStorage<K, H>
 where
     K: serde::Serialize + OutputType + Eq + Hash + Clone,
     K::Output: serde::Serialize + Clone,
+    H: BuildHasher,
 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -71,10 +79,11 @@ where
     }
 }
 
-impl<'de, K> serde::Deserialize<'de> for HashMapStorage<K>
+impl<'de, K, H> serde::Deserialize<'de> for HashMapStorage<K, H>
 where
     K: serde::Deserialize<'de> + Hash + Eq + OutputType + Clone,
     K::Output: serde::Deserialize<'de>,
+    H: Default + BuildHasher,
 {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
