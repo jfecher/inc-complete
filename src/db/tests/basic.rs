@@ -71,15 +71,18 @@ fn no_recompute_basic() {
     let expected_version = START_VERSION + 1;
     assert_eq!(db.version(), expected_version);
 
-    let a1 = db.unwrap_cell_value(&A1);
-    assert_eq!(a1.last_updated_version, expected_version);
-    assert_eq!(a1.last_verified_version, expected_version);
+    db.with_cell_data(&A1, |a1| {
+        assert_eq!(a1.last_updated_version, expected_version);
+        assert_eq!(a1.last_verified_version, expected_version);
+    });
 
-    let a2 = db.unwrap_cell_value(&A2);
-    assert_eq!(a2.last_updated_version, expected_version);
-    assert_eq!(a2.last_verified_version, expected_version);
+    db.with_cell_data(&A2, |a2| {
+        assert_eq!(a2.last_updated_version, expected_version);
+        assert_eq!(a2.last_verified_version, expected_version);
+    });
 
-    let a3 = db.unwrap_cell_value(&A3);
-    assert_eq!(a3.last_updated_version, expected_version);
-    assert_eq!(a3.last_verified_version, expected_version);
+    db.with_cell_data(&A3, |a3| {
+        assert_eq!(a3.last_updated_version, expected_version);
+        assert_eq!(a3.last_verified_version, expected_version);
+    });
 }

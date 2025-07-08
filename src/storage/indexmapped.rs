@@ -78,7 +78,8 @@ where
     where
         S: serde::Serializer,
     {
-        let mut cell_to_key_vec: Vec<(Cell, (K, Option<K::Output>))> = Vec::with_capacity(self.cell_to_key.len());
+        let mut cell_to_key_vec: Vec<(Cell, (K, Option<K::Output>))> =
+            Vec::with_capacity(self.cell_to_key.len());
 
         let guard = Guard::new();
         for (cell, (key, value)) in self.cell_to_key.iter(&guard) {
@@ -98,7 +99,8 @@ where
     where
         D: serde::Deserializer<'de>,
     {
-        let cell_to_key_vec: Vec<(Cell, (K, Option<K::Output>))> = serde::Deserialize::deserialize(deserializer)?;
+        let cell_to_key_vec: Vec<(Cell, (K, Option<K::Output>))> =
+            serde::Deserialize::deserialize(deserializer)?;
 
         let key_to_cell = TreeIndex::new();
         let cell_to_key = TreeIndex::new();
@@ -108,6 +110,9 @@ where
             cell_to_key.insert(cell, (key, value)).ok();
         }
 
-        Ok(TreeIndexStorage { cell_to_key, key_to_cell })
+        Ok(TreeIndexStorage {
+            cell_to_key,
+            key_to_cell,
+        })
     }
 }

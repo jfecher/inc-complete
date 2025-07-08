@@ -17,7 +17,7 @@ const START_VERSION: u32 = 1;
 /// To use this, a type implementing `Storage` is required to be provided.
 /// See the documentation for `impl_storage!`.
 pub struct Db<Storage> {
-    cells: scc::HashMap<Cell, CellData>,
+    cells: dashmap::DashMap<Cell, CellData>,
     version: AtomicU32,
     next_cell: AtomicU32,
     storage: Storage,
@@ -48,9 +48,10 @@ pub trait DbGet<C: OutputType> {
 }
 
 #[cfg(not(feature = "async"))]
-impl<S, C> DbGet<C> for Db<S> where
+impl<S, C> DbGet<C> for Db<S>
+where
     C: OutputType + ComputationId,
-    S: Storage + StorageFor<C>
+    S: Storage + StorageFor<C>,
 {
     fn get(&self, key: C) -> C::Output {
         self.get(key)
@@ -58,9 +59,10 @@ impl<S, C> DbGet<C> for Db<S> where
 }
 
 #[cfg(feature = "async")]
-impl<S, C> DbGet<C> for Db<S> where
+impl<S, C> DbGet<C> for Db<S>
+where
     C: OutputType + ComputationId,
-    S: Storage + StorageFor<C> + Sync
+    S: Storage + StorageFor<C> + Sync,
 {
     fn get(&self, key: C) -> impl Future<Output = C::Output> + Send {
         Db::get(self, key)
@@ -118,9 +120,7 @@ impl<S: Storage> Db<S> {
             let cell_id = self.next_cell.fetch_add(1, Ordering::Relaxed);
             let new_cell = Cell::new(cell_id);
 
-            self.cells
-                .insert(new_cell, CellData::new(computation_id))
-                .ok();
+            self.cells.insert(new_cell, CellData::new(computation_id));
             self.storage.insert_new_cell(new_cell, input);
             new_cell
         }
@@ -132,7 +132,7 @@ impl<S: Storage> Db<S> {
 
     #[cfg(test)]
     #[allow(unused)]
-    pub(crate) fn unwrap_cell_value<C: OutputType>(&self, input: &C) -> CellData
+    pub(crate) fn with_cell_data<C: OutputType>(&self, input: &C, f: impl FnOnce(&CellData))
     where
         S: StorageFor<C>,
     {
@@ -140,7 +140,7 @@ impl<S: Storage> Db<S> {
             .get_cell(input)
             .unwrap_or_else(|| panic!("unwrap_cell_value: Expected cell to exist"));
 
-        self.cells.read(&cell, |_, value| value.clone()).unwrap()
+        self.cells.get(&cell).map(|value| f(&value)).unwrap()
     }
 
     pub fn version(&self) -> u32 {
@@ -169,7 +169,7 @@ impl<S: Storage> Db<S> {
         );
 
         let changed = self.storage.update_output(cell_id, new_value);
-        let mut cell = self.cells.get(&cell_id).unwrap();
+        let mut cell = self.cells.get_mut(&cell_id).unwrap();
 
         if changed {
             let version = self.version.fetch_add(1, Ordering::SeqCst) + 1;
@@ -222,11 +222,9 @@ impl<S: Storage> Db<S> {
 
             // This cell is stale if the dependency has been updated since
             // we last verified this cell
-            self.cells
-                .read(dependency_id, |_, dependency| {
-                    dependency.last_updated_version > last_verified
-                })
-                .unwrap()
+            self.with_cell(*dependency_id, |dependency| {
+                dependency.last_updated_version > last_verified
+            })
         })
     }
 
@@ -240,7 +238,7 @@ impl<S: Storage> Db<S> {
         let changed = S::run_computation(&handle, cell_id, computation_id);
 
         let version = self.version.load(Ordering::SeqCst);
-        let mut cell = self.cells.get(&cell_id).unwrap();
+        let mut cell = self.cells.get_mut(&cell_id).unwrap();
         cell.last_verified_version = version;
 
         if changed {
@@ -257,9 +255,21 @@ impl<S: Storage> Db<S> {
         if last_verified_version != version {
             // if any dependency may have changed, update
             if self.is_stale_cell(cell_id) {
-                self.run_compute_function(cell_id);
+                let lock = self.with_cell(cell_id, |cell| cell.lock.clone());
+
+                match lock.try_lock() {
+                    Some(guard) => {
+                        self.run_compute_function(cell_id);
+                        drop(guard);
+                    }
+                    None => {
+                        // This computation is already being run in another thread.
+                        // Block until it finishes and return the result
+                        drop(lock.lock());
+                    }
+                }
             } else {
-                let mut cell = self.cells.get(&cell_id).unwrap();
+                let mut cell = self.cells.get_mut(&cell_id).unwrap();
                 cell.last_verified_version = version;
             }
         }
@@ -292,7 +302,7 @@ impl<S: Storage> Db<S> {
     }
 
     fn with_cell<R>(&self, cell: Cell, f: impl FnOnce(&CellData) -> R) -> R {
-        self.cells.read(&cell, |_, data| f(data)).unwrap()
+        f(&self.cells.get(&cell).unwrap())
     }
 }
 

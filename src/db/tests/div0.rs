@@ -128,12 +128,12 @@ fn dynamic_dependency_removed() {
     assert_eq!(db.get(Result), 0);
 
     let divide0_version = db.version();
-    let result_cell = db.unwrap_cell_value(&Result);
-    let result_last_verified = result_cell.last_verified_version;
-    let result_last_updated = result_cell.last_updated_version;
-
-    assert_eq!(result_last_verified, divide0_version);
-    assert_eq!(result_last_updated, divide0_version);
+    db.with_cell_data(&Result, |result_cell| {
+        let result_last_verified = result_cell.last_verified_version;
+        let result_last_updated = result_cell.last_updated_version;
+        assert_eq!(result_last_verified, divide0_version);
+        assert_eq!(result_last_updated, divide0_version);
+    });
 
     eprintln!("\nSetting numerator = 12 now");
 
@@ -148,9 +148,10 @@ fn dynamic_dependency_removed() {
     assert!(!db.is_stale(&Result));
 
     // Division shouldn't have been updated or verified in a while
-    let division_cell = db.unwrap_cell_value(&Division);
-    let division_last_verified = division_cell.last_verified_version;
-    let division_last_updated = division_cell.last_updated_version;
-    assert_eq!(division_last_verified, divide_changed_version);
-    assert_eq!(division_last_updated, divide_changed_version);
+    db.with_cell_data(&Division, |division_cell| {
+        let division_last_verified = division_cell.last_verified_version;
+        let division_last_updated = division_cell.last_updated_version;
+        assert_eq!(division_last_verified, divide_changed_version);
+        assert_eq!(division_last_updated, divide_changed_version);
+    });
 }

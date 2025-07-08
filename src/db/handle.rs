@@ -19,7 +19,7 @@ impl<'db, S> DbHandle<'db, S> {
     pub(crate) fn new(db: &'db Db<S>, current_operation: Cell) -> Self {
         // We're re-running a cell so remove any past dependencies
         db.cells
-            .get(&current_operation)
+            .get_mut(&current_operation)
             .unwrap()
             .dependencies
             .clear();
@@ -47,7 +47,7 @@ impl<S: Storage> DbHandle<'_, S> {
     {
         // Register the dependency
         let dependency = self.db.get_or_insert_cell(compute);
-        let mut cell = self.db.cells.get(&self.current_operation).unwrap();
+        let mut cell = self.db.cells.get_mut(&self.current_operation).unwrap();
         cell.dependencies.push(dependency);
         drop(cell);
 
@@ -75,9 +75,10 @@ impl<S: Storage> DbHandle<'_, S> {
 }
 
 #[cfg(not(feature = "async"))]
-impl<'db, S, C> DbGet<C> for DbHandle<'db, S> where
+impl<'db, S, C> DbGet<C> for DbHandle<'db, S>
+where
     C: OutputType + ComputationId,
-    S: Storage + StorageFor<C>
+    S: Storage + StorageFor<C>,
 {
     fn get(&self, key: C) -> C::Output {
         self.get(key)
@@ -85,9 +86,10 @@ impl<'db, S, C> DbGet<C> for DbHandle<'db, S> where
 }
 
 #[cfg(feature = "async")]
-impl<'db, S, C> DbGet<C> for DbHandle<'db, S> where
+impl<'db, S, C> DbGet<C> for DbHandle<'db, S>
+where
     C: OutputType + ComputationId,
-    S: Storage + StorageFor<C> + Sync
+    S: Storage + StorageFor<C> + Sync,
 {
     fn get(&self, key: C) -> impl Future<Output = C::Output> + Send {
         self.get(key)

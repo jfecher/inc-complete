@@ -5,7 +5,8 @@ use std::hash::{BuildHasher, Hash};
 
 use super::OutputType;
 
-pub struct HashMapStorage<K, Hasher = rustc_hash::FxBuildHasher> where
+pub struct HashMapStorage<K, Hasher = rustc_hash::FxBuildHasher>
+where
     K: OutputType + Eq + Hash,
     Hasher: BuildHasher,
 {
@@ -13,7 +14,8 @@ pub struct HashMapStorage<K, Hasher = rustc_hash::FxBuildHasher> where
     cell_to_key: HashMap<Cell, (K, Option<K::Output>), Hasher>,
 }
 
-impl<K, H> Default for HashMapStorage<K, H> where
+impl<K, H> Default for HashMapStorage<K, H>
+where
     K: OutputType + Eq + Hash,
     H: Default + BuildHasher,
 {
@@ -69,7 +71,8 @@ where
     where
         S: serde::Serializer,
     {
-        let mut cell_to_key_vec: Vec<(Cell, (K, Option<K::Output>))> = Vec::with_capacity(self.cell_to_key.len());
+        let mut cell_to_key_vec: Vec<(Cell, (K, Option<K::Output>))> =
+            Vec::with_capacity(self.cell_to_key.len());
 
         self.cell_to_key.scan(|cell, (key, value)| {
             cell_to_key_vec.push((*cell, (key.clone(), value.clone())));
@@ -89,7 +92,8 @@ where
     where
         D: serde::Deserializer<'de>,
     {
-        let cell_to_key_vec: Vec<(Cell, (K, Option<K::Output>))> = serde::Deserialize::deserialize(deserializer)?;
+        let cell_to_key_vec: Vec<(Cell, (K, Option<K::Output>))> =
+            serde::Deserialize::deserialize(deserializer)?;
 
         let key_to_cell = HashMap::default();
         let cell_to_key = HashMap::default();
@@ -99,6 +103,9 @@ where
             cell_to_key.insert(cell, (key, value)).ok();
         }
 
-        Ok(HashMapStorage { cell_to_key, key_to_cell })
+        Ok(HashMapStorage {
+            cell_to_key,
+            key_to_cell,
+        })
     }
 }

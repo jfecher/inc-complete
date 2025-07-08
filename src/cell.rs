@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 #[derive(
     Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
 )]
@@ -10,12 +12,12 @@ impl Cell {
     }
 }
 
-#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub(crate) struct CellData {
     pub(crate) computation_id: u32,
     pub(crate) last_updated_version: u32,
     pub(crate) last_verified_version: u32,
     pub(crate) dependencies: Vec<Cell>,
+    pub(crate) lock: Arc<parking_lot::Mutex<()>>,
 }
 
 impl CellData {
@@ -25,6 +27,7 @@ impl CellData {
             last_updated_version: 0,
             last_verified_version: 0,
             dependencies: Vec::new(),
+            lock: Arc::new(parking_lot::Mutex::new(())),
         }
     }
 }
