@@ -90,7 +90,7 @@ checksum = "e5274423e17b7c9fc20b6e7e208532f9b19825d82dfd615708b70edd83df41f1"
 
 [[package]]
 name = "inc-complete"
-version = "0.5.2"
+version = "0.5.3"
 dependencies = [
  "dashmap",
  "parking_lot",

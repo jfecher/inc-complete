@@ -40,6 +40,8 @@ impl<'db, S> DbHandle<'db, S> {
 }
 
 impl<S: Storage> DbHandle<'_, S> {
+    /// Locking behavior: This function locks the cell corresponding to the given computation. This
+    /// can cause a deadlock if the computation recursively depends on itself.
     #[cfg(not(feature = "async"))]
     pub fn get<C: OutputType + ComputationId>(&self, compute: C) -> C::Output
     where

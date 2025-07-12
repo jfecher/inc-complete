@@ -275,12 +275,13 @@ impl<S: Storage> Db<S> {
         }
     }
 
-    /// Async version of `Db::get`
-    ///
     /// Retrieves the up to date value for the given computation, re-running any dependencies as
     /// necessary.
     ///
     /// This function can panic if the dynamic type of the value returned by `compute.run(..)` is not `T`.
+    ///
+    /// Locking behavior: This function locks the cell corresponding to the given computation. This
+    /// can cause a deadlock if the computation recursively depends on itself.
     pub fn get<C: OutputType + ComputationId>(&self, compute: C) -> C::Output
     where
         S: StorageFor<C>,
@@ -289,7 +290,6 @@ impl<S: Storage> Db<S> {
         self.get_with_cell::<C>(cell_id)
     }
 
-    /// A async version of `get_with_cell` which awaits if the given computation is not already computed.
     pub(crate) fn get_with_cell<Concrete: OutputType>(&self, cell_id: Cell) -> Concrete::Output
     where
         S: StorageFor<Concrete>,
@@ -429,8 +429,6 @@ impl<S: Storage + Sync> Db<S> {
         }
     }
 
-    /// Async version of `Db::get`
-    ///
     /// Retrieves the up to date value for the given computation, re-running any dependencies as
     /// necessary.
     ///
@@ -443,7 +441,6 @@ impl<S: Storage + Sync> Db<S> {
         self.get_with_cell::<C>(cell_id)
     }
 
-    /// A async version of `get_with_cell` which awaits if the given computation is not already computed.
     pub(crate) fn get_with_cell<Concrete: OutputType>(
         &self,
         cell_id: Cell,

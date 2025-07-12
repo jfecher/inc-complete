@@ -1,3 +1,7 @@
+# 0.5.3
+
+- Lock computations to prevent multiple threads unnecessarily running the same computation
+
 # 0.5.2
 
 - Allow specifying a custom `BuildHasher` for `HashMapStorage`. This defaults to `rustc_hash::FxBuildHasher` if unspecified.
