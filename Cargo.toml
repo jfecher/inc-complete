@@ -1,6 +1,6 @@
 [package]
 name = "inc-complete"
-version = "0.5.4"
+version = "0.6.0"
 edition = "2024"
 authors = ["Jake Fecher <jfecher11@gmail.com>"]
 readme = "README.md"
