@@ -74,6 +74,7 @@ pub trait ComputationId {
 
 pub trait OutputType {
     type Output;
+    const IS_INPUT: bool;
 }
 
 pub trait Run<Storage>: OutputType {

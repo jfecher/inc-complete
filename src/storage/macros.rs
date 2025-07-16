@@ -32,6 +32,7 @@ macro_rules! define_intermediate {
     ( $id:tt, $type_name:ident -> $output_type:ty, $( $storage_type:ty )|+, $run_function:expr) => {
         impl $crate::OutputType for $type_name {
             type Output = $output_type;
+            const IS_INPUT: bool = false;
         }
 
         impl $crate::ComputationId for $type_name {
@@ -67,6 +68,7 @@ macro_rules! define_intermediate {
     ( $id:tt, $type_name:ident -> $output_type:ty, $( $storage_type:ty )|+, $run_function:expr) => {
         impl $crate::OutputType for $type_name {
             type Output = $output_type;
+            const IS_INPUT: bool = false;
         }
 
         impl $crate::ComputationId for $type_name {
@@ -125,6 +127,7 @@ macro_rules! define_input {
     ( $id:tt, $type_name:ident -> $output_type:ty, $( $storage_type:ty )|+ ) => {
         impl $crate::OutputType for $type_name {
             type Output = $output_type;
+            const IS_INPUT: bool = true;
         }
 
         impl $crate::ComputationId for $type_name {

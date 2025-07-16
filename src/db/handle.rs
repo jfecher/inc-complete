@@ -18,11 +18,12 @@ pub struct DbHandle<'db, S> {
 impl<'db, S> DbHandle<'db, S> {
     pub(crate) fn new(db: &'db Db<S>, current_operation: Cell) -> Self {
         // We're re-running a cell so remove any past dependencies
-        db.cells
+        let mut cell = db.cells
             .get_mut(&current_operation)
-            .unwrap()
-            .dependencies
-            .clear();
+            .unwrap();
+        
+        cell.dependencies.clear();
+        cell.input_dependencies.clear();
 
         Self {
             db,
@@ -50,11 +51,31 @@ impl<S: Storage> DbHandle<'_, S> {
         // Register the dependency
         let dependency = self.db.get_or_insert_cell(compute);
         let mut cell = self.db.cells.get_mut(&self.current_operation).unwrap();
+
+        // If `dependency` is an input it must be remembered both as a dependency
+        // and as an input dependency. Otherwise we cannot differentiate between
+        // computations which directly depend on inputs and those that only indirectly
+        // depend on them.
         cell.dependencies.push(dependency);
+        if C::IS_INPUT {
+            cell.input_dependencies.insert(dependency);
+        }
+
         drop(cell);
 
         // Fetch the current value of the dependency
-        self.db.get_with_cell(dependency)
+        let output = self.db.get_with_cell(dependency);
+
+        let dependency = self.db.cells.get(&dependency).unwrap();
+        let dependency_inputs = dependency.input_dependencies.clone();
+        drop(dependency);
+
+        let mut cell = self.db.cells.get_mut(&self.current_operation).unwrap();
+        for input in dependency_inputs {
+            cell.input_dependencies.insert(input);
+        }
+
+        output
     }
 
     #[cfg(feature = "async")]

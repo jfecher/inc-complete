@@ -40,21 +40,27 @@ define_input!(1, Denominator -> i32, SafeDiv);
 
 define_intermediate!(2, Division -> i32, SafeDiv, |_, handle: &DbHandle<SafeDiv>| {
     println!("division");
-    handle.get(Numerator) / handle.get(Denominator)
+    let r = handle.get(Numerator) / handle.get(Denominator);
+    println!("division = {r}");
+    r
 });
 
 define_intermediate!(3, DenominatorIs0 -> bool, SafeDiv, |_, handle: &DbHandle<SafeDiv>| {
     println!("denominator is 0");
-    handle.get(Denominator) == 0
+    let r = handle.get(Denominator) == 0;
+    println!("denominator is 0 = {r}");
+    r
 });
 
 define_intermediate!(4, Result -> i32, SafeDiv, |_, handle: &DbHandle<SafeDiv>| {
     println!("result");
-    if handle.get(DenominatorIs0) {
+    let r = if handle.get(DenominatorIs0) {
         0
     } else {
         handle.get(Division)
-    }
+    };
+    println!("result = {r}");
+    r
 });
 
 type SafeDivDb = Db<SafeDiv>;
@@ -123,6 +129,8 @@ fn dynamic_dependency_removed() {
     assert_eq!(db.get(Result), 3);
     let divide_changed_version = db.version();
 
+    println!("Re-running with denominator = 0");
+
     // Re-run with Denominator = 0
     db.update_input(Denominator, 0);
     assert_eq!(db.get(Result), 0);
@@ -135,7 +143,7 @@ fn dynamic_dependency_removed() {
         assert_eq!(result_last_updated, divide0_version);
     });
 
-    eprintln!("\nSetting numerator = 12 now");
+    println!("\nSetting numerator = 12 now");
 
     // Now update the Numerator and test that Result is not re-computed.
     // If Division were still a dependency, updating Numerator would trigger

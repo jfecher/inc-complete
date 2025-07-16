@@ -1,3 +1,15 @@
+# 0.6.0
+
+- Optimizes graph search when an input unused by a computation is changed.
+  - Computations now track inputs they indirectly use and we can cut off the graph search early
+    when none of the inputs they use have changed. This greatly improves performance when you
+    have a large graph with many inputs which each may affect only some subset of the graph at the
+    cost of some performance of the general case.
+
+## Breaking:
+
+- Serialization for `CellData` includes an additional `input_dependencies` field
+
 # 0.5.3
 
 - Lock computations to prevent multiple threads unnecessarily running the same computation

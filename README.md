@@ -6,14 +6,9 @@ number of steps when an input is changed. Example uses:
 - Compilers: re-compile only the portion of a program which has changed
 - Spreadsheets: re-compute only formulas which rely on changed cells
 
-Compared to existing solutions like [salsa](https://github.com/salsa-rs/salsa) or [adapton](https://docs.rs/adapton/latest/adapton/),
-inc-complete is built from the ground-up to support one feature: (de)serialization to enable
-incremental compilers across separate compiler runs. If you do not need this I recommend using
-a more mature library like Salsa instead. If you do need this then continue reading!
-
 ## Status
 
-This library is in a very early but working state. Expect the API to change over time, and
+This library is in an early but working state. Expect the API to change over time, and
 expect certain patterns to be somewhat obtuse. Additionally, while serialization is working,
 the format is not currently stable across releases of inc-complete.
 
