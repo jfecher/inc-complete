@@ -18,10 +18,8 @@ pub struct DbHandle<'db, S> {
 impl<'db, S> DbHandle<'db, S> {
     pub(crate) fn new(db: &'db Db<S>, current_operation: Cell) -> Self {
         // We're re-running a cell so remove any past dependencies
-        let mut cell = db.cells
-            .get_mut(&current_operation)
-            .unwrap();
-        
+        let mut cell = db.cells.get_mut(&current_operation).unwrap();
+
         cell.dependencies.clear();
         cell.input_dependencies.clear();
 

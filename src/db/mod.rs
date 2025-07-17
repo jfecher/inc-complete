@@ -181,7 +181,9 @@ impl<S: Storage> Db<S> {
     }
 
     fn is_input(&self, cell: Cell) -> bool {
-        self.with_cell(cell, |cell| cell.dependencies.is_empty() && cell.input_dependencies.is_empty())
+        self.with_cell(cell, |cell| {
+            cell.dependencies.is_empty() && cell.input_dependencies.is_empty()
+        })
     }
 
     /// True if a given computation is stale and needs to be re-computed.
@@ -211,7 +213,11 @@ impl<S: Storage> Db<S> {
 
         // if any input dependency has changed, this cell is stale
         let (last_verified, inputs, dependencies) = self.with_cell(cell, |data| {
-            (data.last_verified_version, data.input_dependencies.clone(), data.dependencies.clone())
+            (
+                data.last_verified_version,
+                data.input_dependencies.clone(),
+                data.dependencies.clone(),
+            )
         });
 
         // Optimization: only recursively check all dependencies if any
@@ -219,15 +225,14 @@ impl<S: Storage> Db<S> {
         let inputs_changed = inputs.into_iter().any(|input_id| {
             // This cell is stale if the dependency has been updated since
             // we last verified this cell
-            self.with_cell(input_id, |input| {
-                input.last_updated_version > last_verified
-            })
+            self.with_cell(input_id, |input| input.last_updated_version > last_verified)
         });
 
         // Dependencies need to be iterated in the order they were computed.
         // Otherwise we may re-run a computation which does not need to be re-run.
         // In the worst case this could even lead to panics - see the div0 test.
-        inputs_changed && dependencies.into_iter().any(|dependency_id| {
+        inputs_changed
+            && dependencies.into_iter().any(|dependency_id| {
                 self.update_cell(dependency_id);
                 self.with_cell(dependency_id, |dependency| {
                     dependency.last_updated_version > last_verified

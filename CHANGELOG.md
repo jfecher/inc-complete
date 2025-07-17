@@ -1,3 +1,8 @@
+# 0.6.1
+
+- Switch `HashMapStorage` to use `DashMap` by default
+- Optimize input dependency tracking slightly - use an FxHashSet instead of a BTreeSet.
+
 # 0.6.0
 
 - Optimizes graph search when an input unused by a computation is changed.

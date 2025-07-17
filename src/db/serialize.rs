@@ -1,6 +1,7 @@
-use std::{collections::BTreeSet, sync::{
-    atomic::{AtomicU32, Ordering}, Arc
-}};
+use std::sync::{
+    Arc,
+    atomic::{AtomicU32, Ordering},
+};
 
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize, ser::SerializeStruct};
@@ -21,6 +22,8 @@ where
 
         for item in self.cells.iter() {
             let value = item.value();
+            let input_dependencies: Vec<_> = value.input_dependencies.iter().copied().collect();
+
             cells.push((
                 *item.key(),
                 CellDataDeserialize {
@@ -28,7 +31,7 @@ where
                     last_updated_version: value.last_updated_version,
                     last_verified_version: value.last_verified_version,
                     dependencies: value.dependencies.clone(),
-                    input_dependencies: value.input_dependencies.clone(),
+                    input_dependencies,
                 },
             ));
         }
@@ -61,7 +64,7 @@ struct CellDataDeserialize {
     last_updated_version: u32,
     last_verified_version: u32,
     dependencies: Vec<Cell>,
-    input_dependencies: BTreeSet<Cell>,
+    input_dependencies: Vec<Cell>,
 }
 
 impl<'de, Storage> serde::Deserialize<'de> for Db<Storage>
@@ -84,7 +87,7 @@ where
                     last_updated_version: data.last_updated_version,
                     last_verified_version: data.last_verified_version,
                     dependencies: data.dependencies,
-                    input_dependencies: data.input_dependencies,
+                    input_dependencies: data.input_dependencies.into_iter().collect(),
                     lock: Arc::new(Mutex::new(())),
                 },
             );
