@@ -1,13 +1,13 @@
-use std::{collections::BTreeSet, sync::{
+use std::sync::{
     atomic::{AtomicU32, Ordering}, Arc
-}};
+};
 
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize, ser::SerializeStruct};
 
 use crate::Cell;
 
-use super::Db;
+use super::{input_sets::{InputSetId, InputSets}, Db};
 
 impl<Storage> serde::Serialize for Db<Storage>
 where
@@ -28,7 +28,7 @@ where
                     last_updated_version: value.last_updated_version,
                     last_verified_version: value.last_verified_version,
                     dependencies: value.dependencies.clone(),
-                    input_dependencies: value.input_dependencies.clone(),
+                    input_dependencies: value.input_dependencies,
                 },
             ));
         }
@@ -40,6 +40,7 @@ where
         s.serialize_field("version", &version)?;
         s.serialize_field("next_cell", &next_cell)?;
         s.serialize_field("cells", &cells)?;
+        s.serialize_field("input_sets", &self.input_sets)?;
         s.serialize_field("storage", &self.storage)?;
         s.end()
     }
@@ -51,6 +52,7 @@ struct DbDeserialize<Storage> {
     version: u32,
     next_cell: u32,
     cells: Vec<(Cell, CellDataDeserialize)>,
+    input_sets: InputSets,
     storage: Storage,
 }
 
@@ -61,7 +63,7 @@ struct CellDataDeserialize {
     last_updated_version: u32,
     last_verified_version: u32,
     dependencies: Vec<Cell>,
-    input_dependencies: BTreeSet<Cell>,
+    input_dependencies: InputSetId,
 }
 
 impl<'de, Storage> serde::Deserialize<'de> for Db<Storage>
@@ -95,6 +97,7 @@ where
             version: AtomicU32::new(db.version),
             next_cell: AtomicU32::new(db.next_cell),
             storage: db.storage,
+            input_sets: db.input_sets,
         })
     }
 }

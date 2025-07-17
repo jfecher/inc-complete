@@ -1,4 +1,6 @@
-use std::{collections::BTreeSet, sync::Arc};
+use std::sync::Arc;
+
+use crate::db::input_sets::InputSetId;
 
 #[derive(
     Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
@@ -17,7 +19,7 @@ pub(crate) struct CellData {
     pub(crate) last_updated_version: u32,
     pub(crate) last_verified_version: u32,
     pub(crate) dependencies: Vec<Cell>,
-    pub(crate) input_dependencies: BTreeSet<Cell>,
+    pub(crate) input_dependencies: InputSetId,
     pub(crate) lock: Arc<parking_lot::Mutex<()>>,
 }
 
@@ -28,7 +30,7 @@ impl CellData {
             last_updated_version: 0,
             last_verified_version: 0,
             dependencies: Vec::new(),
-            input_dependencies: BTreeSet::new(),
+            input_dependencies: InputSetId::EMPTY_INPUT_SET,
             lock: Arc::new(parking_lot::Mutex::new(())),
         }
     }

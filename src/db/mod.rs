@@ -7,8 +7,10 @@ use crate::{Cell, OutputType, Storage};
 mod handle;
 mod serialize;
 mod tests;
+pub(crate) mod input_sets;
 
 pub use handle::DbHandle;
+use input_sets::InputSets;
 
 const START_VERSION: u32 = 1;
 
@@ -18,6 +20,7 @@ const START_VERSION: u32 = 1;
 /// See the documentation for `impl_storage!`.
 pub struct Db<Storage> {
     cells: dashmap::DashMap<Cell, CellData>,
+    input_sets: input_sets::InputSets,
     version: AtomicU32,
     next_cell: AtomicU32,
     storage: Storage,
@@ -76,6 +79,7 @@ impl<S> Db<S> {
             cells: Default::default(),
             version: AtomicU32::new(START_VERSION),
             next_cell: AtomicU32::new(0),
+            input_sets: InputSets::new(),
             storage,
         }
     }
@@ -211,15 +215,15 @@ impl<S: Storage> Db<S> {
 
         // if any input dependency has changed, this cell is stale
         let (last_verified, inputs, dependencies) = self.with_cell(cell, |data| {
-            (data.last_verified_version, data.input_dependencies.clone(), data.dependencies.clone())
+            (data.last_verified_version, data.input_dependencies, data.dependencies.clone())
         });
 
         // Optimization: only recursively check all dependencies if any
         // of the inputs this cell depends on have changed
-        let inputs_changed = inputs.into_iter().any(|input_id| {
+        let inputs_changed = self.input_sets.get_set(inputs).iter().any(|input_id| {
             // This cell is stale if the dependency has been updated since
             // we last verified this cell
-            self.with_cell(input_id, |input| {
+            self.with_cell(*input_id, |input| {
                 input.last_updated_version > last_verified
             })
         });

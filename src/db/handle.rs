@@ -3,7 +3,7 @@ use crate::{
     storage::{ComputationId, StorageFor},
 };
 
-use super::DbGet;
+use super::{input_sets::InputSetId, DbGet};
 
 /// A handle to the database during some operation.
 ///
@@ -23,7 +23,7 @@ impl<'db, S> DbHandle<'db, S> {
             .unwrap();
         
         cell.dependencies.clear();
-        cell.input_dependencies.clear();
+        cell.input_dependencies = InputSetId::EMPTY_INPUT_SET;
 
         Self {
             db,
@@ -58,22 +58,21 @@ impl<S: Storage> DbHandle<'_, S> {
         // depend on them.
         cell.dependencies.push(dependency);
         if C::IS_INPUT {
-            cell.input_dependencies.insert(dependency);
+            cell.input_dependencies = self.db.input_sets.insert(cell.input_dependencies, dependency);
         }
 
+        // Cell may share the same lock as dependency below which we need to acquire so we need
+        // to drop it first or suffer random deadlocks.
         drop(cell);
 
         // Fetch the current value of the dependency
         let output = self.db.get_with_cell(dependency);
 
-        let dependency = self.db.cells.get(&dependency).unwrap();
-        let dependency_inputs = dependency.input_dependencies.clone();
-        drop(dependency);
+        let dependency_inputs = self.db.cells.get(&dependency).unwrap().input_dependencies;
 
+        // Add any inputs indirectly used as well
         let mut cell = self.db.cells.get_mut(&self.current_operation).unwrap();
-        for input in dependency_inputs {
-            cell.input_dependencies.insert(input);
-        }
+        cell.input_dependencies = self.db.input_sets.union(cell.input_dependencies, dependency_inputs);
 
         output
     }
