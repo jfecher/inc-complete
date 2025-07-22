@@ -10,13 +10,15 @@
 /// Example usage:
 /// ```
 /// # use inc_complete::{ define_intermediate, define_input, storage::SingletonStorage, impl_storage, DbHandle };
-/// # struct MyStorageType { input: SingletonStorage<MyInput>, double: SingletonStorage<Double> }
+/// # struct MyStorageType { input: SingletonStorage<MyInput>, double: SingletonStorage<Double>, more: SingletonStorage<More> }
 /// # #[derive(Clone)]
 /// # struct MyInput;
 /// # define_input!(0, MyInput -> i32, MyStorageType);
-/// # impl_storage!(MyStorageType, input:MyInput, double:Double);
+/// # impl_storage!(MyStorageType, input:MyInput, double:Double, more:More);
 /// ##[derive(Clone)]
 /// struct Double;
+/// ##[derive(Clone)]
+/// struct More;
 ///
 /// // Define `Double` as a computation with id 1 and the given run function which returns an `i32`
 /// // to be used with a `Db<MyStorageType>` or `DbHandle<MyStorageType>`.
@@ -25,14 +27,26 @@
 /// define_intermediate!(1, Double -> i32, MyStorageType, |_: &Double, db: &DbHandle<MyStorageType>| {
 ///     db.get(MyInput) * 2
 /// });
+///
+/// // It is also possible to signal that the value always changes with the assume_changed keyword:
+/// define_intermediate!(2, assume_changed More -> i32, MyStorageType, |_, db: &DbHandle<MyStorageType>| {
+///     db.get(Double) + 1
+/// });
 /// ```
 #[cfg(not(feature = "async"))]
 #[macro_export]
 macro_rules! define_intermediate {
     ( $id:tt, $type_name:ident -> $output_type:ty, $( $storage_type:ty )|+, $run_function:expr) => {
+        define_intermediate!(@ $id, $type_name -> $output_type, false, $( $storage_type )|+, $run_function);
+    };
+    ( $id:tt, assume_changed $type_name:ident -> $output_type:ty, $( $storage_type:ty )|+, $run_function:expr) => {
+        define_intermediate!(@ $id, $type_name -> $output_type, true, $( $storage_type )|+, $run_function);
+    };
+    (@ $id:tt, $type_name:ident -> $output_type:ty, $assume_changed:expr, $( $storage_type:ty )|+, $run_function:expr) => {
         impl $crate::OutputType for $type_name {
             type Output = $output_type;
             const IS_INPUT: bool = false;
+            const ASSUME_CHANGED: bool = $assume_changed;
         }
 
         impl $crate::ComputationId for $type_name {
@@ -66,9 +80,16 @@ macro_rules! define_intermediate {
 #[macro_export]
 macro_rules! define_intermediate {
     ( $id:tt, $type_name:ident -> $output_type:ty, $( $storage_type:ty )|+, $run_function:expr) => {
+        define_intermediate!(@ $id, $type_name -> $output_type, false, $( $storage_type )|+, $run_function);
+    };
+    ( $id:tt, assume_changed $type_name:ident -> $output_type:ty, $( $storage_type:ty )|+, $run_function:expr) => {
+        define_intermediate!(@ $id, $type_name -> $output_type, true, $( $storage_type )|+, $run_function);
+    };
+    (@ $id:tt, $type_name:ident -> $output_type:ty, $assume_changed:expr, $( $storage_type:ty )|+, $run_function:expr) => {
         impl $crate::OutputType for $type_name {
             type Output = $output_type;
             const IS_INPUT: bool = false;
+            const ASSUME_CHANGED: bool = $assume_changed;
         }
 
         impl $crate::ComputationId for $type_name {
@@ -125,9 +146,16 @@ macro_rules! define_intermediate {
 #[macro_export]
 macro_rules! define_input {
     ( $id:tt, $type_name:ident -> $output_type:ty, $( $storage_type:ty )|+ ) => {
+        define_input!(@ $id, $type_name -> $output_type, false, $( $storage_type )|+);
+    };
+    ( $id:tt, assume_changed $type_name:ident -> $output_type:ty, $( $storage_type:ty )|+ ) => {
+        define_input!(@ $id, $type_name -> $output_type, true, $( $storage_type )|+);
+    };
+    (@ $id:tt, $type_name:ident -> $output_type:ty, $assume_changed:expr, $( $storage_type:ty )|+ ) => {
         impl $crate::OutputType for $type_name {
             type Output = $output_type;
             const IS_INPUT: bool = true;
+            const ASSUME_CHANGED: bool = $assume_changed;
         }
 
         impl $crate::ComputationId for $type_name {

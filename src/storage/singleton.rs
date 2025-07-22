@@ -53,7 +53,7 @@ where
 
     fn update_output(&self, _: Cell, new_value: K::Output) -> bool {
         let mut guard = self.value.lock().unwrap();
-        let changed = guard.as_ref().is_none_or(|value| *value != new_value);
+        let changed = K::ASSUME_CHANGED || guard.as_ref().is_none_or(|value| *value != new_value);
         *guard = Some(new_value);
         changed
     }
