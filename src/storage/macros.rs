@@ -210,8 +210,14 @@ macro_rules! impl_storage {
                     id => panic!("Unknown computation id: {id}"),
                 }
             }
-
             $crate::run_computation!( $($field: $computation_type),* );
+
+            fn gc(&mut self, used_cells: &std::collections::HashSet<$crate::Cell>) {
+                use $crate::StorageFor;
+                $(
+                    self.$field.gc(&used_cells);
+                )*
+            }
         }
 
         $(
@@ -234,6 +240,10 @@ macro_rules! impl_storage {
 
             fn update_output(&self, cell: $crate::Cell, new_value: <$computation_type as $crate::OutputType>::Output) -> bool {
                 self.$field.update_output(cell, new_value)
+            }
+
+            fn gc(&mut self, used_cells: &std::collections::HashSet<$crate::Cell>) {
+                self.$field.gc(used_cells);
             }
         })*
     };

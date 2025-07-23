@@ -59,6 +59,12 @@ where
         previous_output.1 = Some(new_value);
         changed
     }
+
+    fn gc(&mut self, used_cells: &std::collections::HashSet<Cell>) {
+        // Remove cells that are not in the used set
+        self.cell_to_key.retain(|cell, _| used_cells.contains(cell));
+        self.key_to_cell.retain(|_, cell| used_cells.contains(cell));
+    }
 }
 
 impl<K, H> serde::Serialize for HashMapStorage<K, H>

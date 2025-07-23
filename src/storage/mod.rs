@@ -31,6 +31,7 @@ pub trait Storage: Sized {
     #[cfg(not(feature = "async"))]
     fn run_computation(db: &DbHandle<Self>, cell: Cell, computation_id: u32) -> bool;
 
+    fn gc(&mut self, used_cells: &std::collections::HashSet<Cell>) ;
     /// For the computation type with the given computation id, run the computation
     /// with the corresponding Cell, returning true if the result changed from its previous value.
     #[cfg(feature = "async")]
@@ -66,6 +67,9 @@ pub trait StorageFor<C: OutputType> {
     /// if `new_value` has changed from its previous value, and cache the new value
     /// if needed.
     fn update_output(&self, cell: Cell, new_value: C::Output) -> bool;
+
+
+    fn gc(&mut self, used_cells: &std::collections::HashSet<Cell>) ;
 }
 
 pub trait ComputationId {

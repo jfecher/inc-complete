@@ -67,6 +67,10 @@ where
 
         changed
     }
+
+    fn gc(&mut self, used_cells: &std::collections::HashSet<Cell>) {
+        todo!()
+    }
 }
 
 impl<K> serde::Serialize for TreeIndexStorage<K>

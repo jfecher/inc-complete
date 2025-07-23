@@ -146,6 +146,23 @@ impl<S: Storage> Db<S> {
     pub fn version(&self) -> u32 {
         self.version.load(Ordering::SeqCst)
     }
+
+    
+    pub fn gc(&mut self, version: u32) {
+        let used_cells: std::collections::HashSet<Cell> = self
+            .cells
+            .iter()
+            .filter_map(|entry| {
+                if entry.value().last_verified_version >= version {
+                    Some(entry.key().clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        self.storage.gc(&used_cells);
+    } 
 }
 
 #[cfg(not(feature = "async"))]
