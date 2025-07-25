@@ -48,12 +48,13 @@ where
     }
 
     fn update_output(&self, cell: Cell, new_value: K::Output) -> bool {
-        let changed = self
-            .cell_to_key
-            .peek_with(&cell, |_, old_value| {
-                old_value.1.as_ref().is_none_or(|value| *value != new_value)
-            })
-            .unwrap();
+        let changed = K::ASSUME_CHANGED
+            || self
+                .cell_to_key
+                .peek_with(&cell, |_, old_value| {
+                    old_value.1.as_ref().is_none_or(|value| *value != new_value)
+                })
+                .unwrap();
 
         // TreeIndex is read-optimized so this write will be slow
         if changed {

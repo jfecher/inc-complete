@@ -52,10 +52,11 @@ where
 
     fn update_output(&self, cell: Cell, new_value: K::Output) -> bool {
         let mut previous_output = self.cell_to_key.get_mut(&cell).unwrap();
-        let changed = previous_output
-            .1
-            .as_ref()
-            .is_none_or(|value| *value != new_value);
+        let changed = K::ASSUME_CHANGED
+            || previous_output
+                .1
+                .as_ref()
+                .is_none_or(|value| *value != new_value);
         previous_output.1 = Some(new_value);
         changed
     }

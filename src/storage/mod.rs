@@ -64,7 +64,7 @@ pub trait StorageFor<C: OutputType> {
 
     /// `C` has been re-run and has returned the output `new_value`, return `true`
     /// if `new_value` has changed from its previous value, and cache the new value
-    /// if needed.
+    /// if needed. If `C::ASSUME_CHANGED` is true, skip the comparison and assume the value changed.
     fn update_output(&self, cell: Cell, new_value: C::Output) -> bool;
 }
 
@@ -75,6 +75,7 @@ pub trait ComputationId {
 pub trait OutputType {
     type Output;
     const IS_INPUT: bool;
+    const ASSUME_CHANGED: bool;
 }
 
 pub trait Run<Storage>: OutputType {
