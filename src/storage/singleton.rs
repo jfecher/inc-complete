@@ -57,6 +57,11 @@ where
         *guard = Some(new_value);
         changed
     }
+
+    fn gc(&mut self, used_cells: &std::collections::HashSet<Cell>) {
+        // I don't think there is any point in garbage collecting a singleton storage
+        todo!()
+    }
 }
 
 impl<K> serde::Serialize for SingletonStorage<K>
