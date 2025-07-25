@@ -316,3 +316,5 @@ mod interned;
 pub use cell::Cell;
 pub use db::{Db, DbGet, DbHandle};
 pub use storage::{ComputationId, OutputType, Run, Storage, StorageFor};
+
+pub use inc_complete_derive::{Input, Storage, intermediate};
