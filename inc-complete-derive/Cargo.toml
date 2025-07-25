@@ -1,0 +1,19 @@
+[package]
+name = "inc-complete-derive"
+version = "0.5.4"
+edition = "2024"
+authors = ["Jake Fecher <jfecher11@gmail.com>"]
+readme = "../README.md"
+license-file = "../LICENSE"
+keywords = ["incremental", "compilation", "compiler", "spreadsheet", "derive"]
+description = "Derive macros for inc-complete incremental computation library"
+repository = "https://github.com/jfecher/inc-complete"
+documentation = "https://docs.rs/inc-complete"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = { workspace = true }
+quote = { workspace = true }
+syn = { workspace = true }
