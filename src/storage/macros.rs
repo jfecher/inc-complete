@@ -28,7 +28,8 @@
 ///     db.get(MyInput) * 2
 /// });
 ///
-/// // It is also possible to signal that the value always changes with the assume_changed keyword:
+/// // It is also possible to signal that the value always changes with the assume_changed keyword.
+/// // Doing so let's us avoid expensive `Eq` checks on large values which are expected to change whenever their inputs do anyway:
 /// define_intermediate!(2, assume_changed More -> i32, MyStorageType, |_, db: &DbHandle<MyStorageType>| {
 ///     db.get(Double) + 1
 /// });
