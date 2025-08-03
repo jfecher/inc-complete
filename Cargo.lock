@@ -93,6 +93,7 @@ name = "inc-complete"
 version = "0.6.1"
 dependencies = [
  "dashmap",
+ "inc-complete-derive",
  "parking_lot",
  "rustc-hash",
  "scc",
@@ -100,6 +101,15 @@ dependencies = [
  "serde_json",
  "tokio",
  "tokio-scoped",
+]
+
+[[package]]
+name = "inc-complete-derive"
+version = "0.5.4"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]

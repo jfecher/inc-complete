@@ -1,3 +1,9 @@
+[workspace]
+members = [
+    "inc-complete-derive",
+]
+resolver = "2"
+
 [package]
 name = "inc-complete"
 version = "0.6.1"
@@ -19,8 +25,14 @@ parking_lot = "0.12.4"
 rustc-hash = "2.1.1"
 scc = { version = "2.3.4", features = ["serde"] }
 serde = { version = "1.0", features = ["derive", "rc"] }
+inc-complete-derive = { path = "inc-complete-derive" }
 
 [dev-dependencies]
 serde_json = "1.0"
 tokio = { version = "1.45.1", features = ["macros", "rt-multi-thread"] }
 tokio-scoped = "0.2.0"
+
+[workspace.dependencies]
+proc-macro2 = "1.0"
+quote = "1.0"
+syn = { version = "2.0", features = ["full"] }
