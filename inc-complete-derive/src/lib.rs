@@ -516,9 +516,9 @@ pub fn derive_input(input: TokenStream) -> TokenStream {
 ///
 /// Usage:
 /// ```rust
-/// // Assumes ComputedDouble struct is already defined
+/// // Assumes ComputeDouble struct is already defined
 /// #[intermediate(id = 1)]
-/// fn compute_double(_context: &ComputedDouble, db: &DbHandle<MyStorage>) -> i32 {
+/// fn compute_double(_context: &ComputeDouble, db: &DbHandle<MyStorage>) -> i32 {
 ///     db.get(InputValue) * 2
 /// }
 /// ```
@@ -534,7 +534,7 @@ pub fn derive_input(input: TokenStream) -> TokenStream {
 ///
 /// The macro automatically extracts:
 /// - **Output type** from the function return type (`i32`)
-/// - **Computation type** from the first parameter (`ComputedDouble` from `&ComputedDouble`)
+/// - **Computation type** from the first parameter (`ComputeDouble` from `&ComputeDouble`)
 /// - **Storage type** from the second parameter (`MyStorage` from `&DbHandle<MyStorage>`)
 /// - **Function name** automatically (`compute_double`)
 ///
