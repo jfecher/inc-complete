@@ -287,22 +287,26 @@ impl IntermediateAttributeParser {
 /// #[derive(Storage)]
 /// struct MyStorage {
 ///     numbers: SingletonStorage<Number>,
+///
 ///     #[inc_complete(skip)]
 ///     metadata: String,  // This field won't be included in Storage implementation
 /// }
 ///
-/// ## Storage Attribute
+/// ## Computation Attribute
 ///
-/// Storage type for a field can be manually specified using `#[inc_complete(storage = Type)]`:
+/// The computation type for a field can be manually specified using `#[inc_complete(computation = Type)]`.
+/// This is required if the field type is not already generic over the computation type. For
+/// example, `HashMapStorage<MyComputationType>` is generic over `MyComputationType` but
+/// `MyStringStorage` is not:
 ///
 /// ```rust
 /// #[derive(Storage)]
 /// struct MyStorage {
 ///     numbers: SingletonStorage<Number>,
-///     #[inc_complete(storage = StringComputation)]
-///     strings: MyCustomStorageType,
-/// }
 ///
+///     #[inc_complete(computation = MyStringInput)]
+///     strings: MyStringStorage,
+/// }
 /// ```
 #[proc_macro_derive(Storage, attributes(inc_complete))]
 pub fn derive_storage(input: TokenStream) -> TokenStream {
@@ -339,17 +343,17 @@ pub fn derive_storage(input: TokenStream) -> TokenStream {
 
         // Parse attributes
         let mut skip_field = false;
-        let mut manual_storage_type: Option<Type> = None;
+        let mut manual_computation_type: Option<Type> = None;
 
         for attr in &field.attrs {
             if attr.path().is_ident("inc_complete") {
                 match attr.meta {
                     Meta::List(ref list) => {
-                        // Parse nested attributes like #[inc_complete(skip)] or #[inc_complete(storage = Type)]
+                        // Parse nested attributes like #[inc_complete(skip)] or #[inc_complete(computation = Type)]
                         let nested_result =
                             list.parse_args_with(|parser: syn::parse::ParseStream| {
                                 let mut found_skip = false;
-                                let mut found_storage_type: Option<Type> = None;
+                                let mut found_computation_type: Option<Type> = None;
 
                                 while !parser.is_empty() {
                                     let lookahead = parser.lookahead1();
@@ -357,13 +361,13 @@ pub fn derive_storage(input: TokenStream) -> TokenStream {
                                         let ident: syn::Ident = parser.parse()?;
                                         if ident == "skip" {
                                             found_skip = true;
-                                        } else if ident == "storage" {
+                                        } else if ident == "computation" {
                                             parser.parse::<syn::Token![=]>()?;
-                                            found_storage_type = Some(parser.parse()?);
+                                            found_computation_type = Some(parser.parse()?);
                                         } else {
                                             return Err(syn::Error::new_spanned(
                                                 ident,
-                                                "expected 'skip' or 'storage'",
+                                                "expected 'skip' or 'computation'",
                                             ));
                                         }
                                     } else {
@@ -375,16 +379,16 @@ pub fn derive_storage(input: TokenStream) -> TokenStream {
                                     }
                                 }
 
-                                Ok((found_skip, found_storage_type))
+                                Ok((found_skip, found_computation_type))
                             });
 
                         match nested_result {
-                            Ok((found_skip, found_storage_type)) => {
+                            Ok((found_skip, found_computation_type)) => {
                                 if found_skip {
                                     skip_field = true;
                                 }
-                                if let Some(storage_type) = found_storage_type {
-                                    manual_storage_type = Some(storage_type);
+                                if let Some(computation_type) = found_computation_type {
+                                    manual_computation_type = Some(computation_type);
                                 }
                             }
                             Err(e) => {
@@ -395,7 +399,7 @@ pub fn derive_storage(input: TokenStream) -> TokenStream {
                     _ => {
                         return syn::Error::new_spanned(
                             attr,
-                            "expected #[inc_complete(skip)] or #[inc_complete(storage = Type)]",
+                            "expected #[inc_complete(skip)] or #[inc_complete(computation = Type)]",
                         )
                         .to_compile_error()
                         .into();
@@ -410,7 +414,7 @@ pub fn derive_storage(input: TokenStream) -> TokenStream {
         }
 
         // Determine the computation type
-        let computation_type = if let Some(manual_type) = manual_storage_type {
+        let computation_type = if let Some(manual_type) = manual_computation_type {
             // Use manually specified type
             manual_type
         } else if let Some(extracted_type) = extract_generic_type(field_type, "Storage") {
@@ -419,7 +423,7 @@ pub fn derive_storage(input: TokenStream) -> TokenStream {
         } else {
             return syn::Error::new(
                 field.span(),
-                "Field must be a storage type like SingletonStorage<T>, HashMapStorage<T>, or use #[inc_complete(storage = Type)] to specify the type manually, or use #[inc_complete(skip)] to exclude it",
+                "Field must be a storage type like SingletonStorage<T>, HashMapStorage<T>, or use #[inc_complete(computation = Type)] to specify the type manually, or use #[inc_complete(skip)] to exclude it",
             )
             .to_compile_error()
             .into();
