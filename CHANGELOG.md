@@ -1,3 +1,8 @@
+# 0.6.2
+
+- Added `derive` macros as alternatives to the current `macro_rules!` macros.
+  - The current `macro_rules!` macros may be deprecated later.
+
 # 0.6.1
 
 - Switch `HashMapStorage` to use `DashMap` by default

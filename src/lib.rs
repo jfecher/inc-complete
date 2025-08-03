@@ -20,27 +20,80 @@
 //!
 //! We will have two inputs: `A1` and `A2`, and two intermediates: `B1` and `B2` where
 //! `B1` depends on `A1` and `B2` depends on `B1` and `A2` directly, and `A1` transitively.
-//! Let's start by defining these types:
+//! All computations in inc-complete correspond to a struct representing that computation.
+//! This struct often holds the arguments for the corresponding function to perform but in
+//! this case none of our cells need any parameters besides the values of other cells to query.
+//!
+//! For each input type we'll derive `Input` and give it a unique id, along with 
+//! the output type of the function retrieving the input value, and the storage type we'll store
+//! all the metadata in - we'll define this type later on.
+//! 
+//! Let's start by defining our input types:
 //!
 //! ```
-//! #[derive(Clone)]
+//! # struct MySpreadsheet;
+//! use inc_complete::{ Input, define_input };
+//!
+//! ##[derive(Input, Clone)]
+//! ##[inc_complete(id = 0, output = i32, storage = MySpreadsheet)]
 //! struct A1;
 //!
-//! #[derive(Clone)]
+//! ##[derive(Input, Clone)]
+//! ##[inc_complete(id = 1, output = i32, storage = MySpreadsheet)]
 //! struct A2;
-//!
-//! #[derive(Clone)]
-//! struct B1;
-//!
-//! #[derive(Clone)]
-//! struct B2;
 //! ```
 //!
-//! The derives are all necessary for some traits we'll implement later.
+//! Next, let's define the intermediate computations and the functions to compute them.
+//! For these we just need to define the computation type and use the `intermediate` macro 
+//! on a function to perform that computation. Note that this function should have
+//! exactly two arguments: the computation type itself (which may be a struct containing
+//! more arguments to use if needed), and a `DbHandle` containing your storage type:
 //!
-//! Now we can define the actual storage type for all our computations. We need to
-//! call `impl_storage!` to implement a few traits for us. These can also be
-//! implemented manually, but there is little advantage in doing so.
+//! ```
+//! # use inc_complete::{ Input, define_input, Storage, impl_storage };
+//! # #[derive(Input, Clone)]
+//! # #[inc_complete(id = 0, output = i32, storage = MySpreadsheet)]
+//! # struct A1;
+//! # #[derive(Input, Clone)]
+//! # #[inc_complete(id = 1, output = i32, storage = MySpreadsheet)]
+//! # struct A2;
+//! # #[derive(Clone)]
+//! # struct B1;
+//! # use inc_complete::storage::SingletonStorage;
+//! # #[derive(Storage, Default)]
+//! # struct MySpreadsheet {
+//! #     a1: SingletonStorage<A1>,
+//! #     a2: SingletonStorage<A2>,
+//! #     b1: SingletonStorage<B1>,
+//! #     b2: SingletonStorage<B2>,
+//! #     #[inc_complete(skip)]
+//! #     my_metadata: String,
+//! # }
+//! use inc_complete::{ intermediate, define_intermediate };
+//!
+//! ##[intermediate(id = 2)]
+//! fn compute_b1(_ctx: &B1, db: &inc_complete::DbHandle<MySpreadsheet>) -> i32 {
+//!     // These functions should be pure but we're going to cheat here to
+//!     // make it obvious when a function is recomputed
+//!     println!("Computing B1!");
+//!     db.get(A1) + 8
+//! }
+//!
+//! ##[derive(Clone)]
+//! struct B2;
+//!
+//! ##[intermediate(id = 2)]
+//! fn compute_b2(_ctx: &B2, db: &inc_complete::DbHandle<MySpreadsheet>) -> i32 {
+//!     println!("Computing B2!");
+//!     db.get(B1) + db.get(A2)
+//! }
+//! ```
+//!
+//! Ceremony aside - this code should be relatively straight-forward. We `get` the value of
+//! any sub-computations we need and the `DbHandle` object automatically gives us the most
+//! up to date version of those computations - we'll examine this claim a bit closer later.
+//!
+//! Now we can define the actual storage type to hold all our computations. 
 //!
 //! ```
 //! # #[derive(Clone)]
@@ -53,37 +106,36 @@
 //! # struct B2;
 //! # use inc_complete::storage::SingletonStorage;
 //! # use inc_complete::define_input;
-//! # define_input!(0, A1 -> i64, Spreadsheet);
-//! # define_input!(1, A2 -> i64, Spreadsheet);
+//! # define_input!(0, A1 -> i64, MySpreadsheet);
+//! # define_input!(1, A2 -> i64, MySpreadsheet);
 //! # use inc_complete::define_intermediate;
-//! # define_intermediate!(2, B1 -> i64, Spreadsheet, |_b1, db| {
+//! # define_intermediate!(2, B1 -> i64, MySpreadsheet, |_b1, db| {
 //! #     // These functions should be pure but we're going to cheat here to
 //! #     // make it obvious when a function is recomputed
 //! #     println!("Computing B1!");
 //! #     db.get(A1) + 8
 //! # });
 //! # // Larger programs may wish to pass an existing function instead of a closure
-//! # define_intermediate!(3, B2 -> i64, Spreadsheet, |_b2, db| {
+//! # define_intermediate!(3, B2 -> i64, MySpreadsheet, |_b2, db| {
 //! #     println!("Computing B2!");
 //! #     db.get(B1) + db.get(A2)
 //! # });
-//! use inc_complete::impl_storage;
+//! use inc_complete::{ Storage, impl_storage };
 //!
-//! ##[derive(Default)]
-//! struct Spreadsheet {
+//! ##[derive(Storage, Default)]
+//! struct MySpreadsheet {
 //!     a1: SingletonStorage<A1>,
 //!     a2: SingletonStorage<A2>,
 //!     b1: SingletonStorage<B1>,
 //!     b2: SingletonStorage<B2>,
-//! }
 //!
-//! // This macro may be replaced with a derive proc macro in the future
-//! impl_storage!(Spreadsheet,
-//!     a1: A1,
-//!     a2: A2,
-//!     b1: B1,
-//!     b2: B2,
-//! );
+//!     // If you need to store non-computation data you can use the `skip` attribute.
+//!     // Just be careful since changes to this data will not be tracked by inc-complete,
+//!     // it is possible to break incrementality! To avoid this, avoid mutating any `skip`
+//!     // fields in the middle of an incremental computation.
+//!     #[inc_complete(skip)]
+//!     my_metadata: String,
+//! }
 //! ```
 //!
 //! In this example, we're using `SingletonStorage` for all of our
@@ -92,108 +144,6 @@
 //! `HashMap<K, V>`. If you are unsure which storage type to choose, `HashMapStorage<T>`
 //! is a good default. Even if used on singletons it will give you correct
 //! behavior, just with slightly worse performance than `SingletonStorage<T>`.
-//!
-//! Next, for `Input` types we now need to define:
-//! 1. What type the input is - for this spreadsheet example all our types are `i64`.
-//! 2. A unique computation id. This id uniquely identifies the particular computation type we
-//!    want to cache. If there are any duplicates inc-complete may call the wrong `run` function
-//!    to update a computation! These are also part of the serialized output so they are important
-//!    to keep stable across changes if you want your serialization to remain backwards-compatible.
-//!
-//! For both of these, we can use the `define_input!` macro:
-//! ```
-//! # #[derive(Clone)]
-//! # struct A1;
-//! # #[derive(Clone)]
-//! # struct A2;
-//! # #[derive(Clone, PartialEq, Eq, Hash)]
-//! # struct B1;
-//! # #[derive(Clone, PartialEq, Eq, Hash)]
-//! # struct B2;
-//! # use inc_complete::storage::SingletonStorage;
-//! # use inc_complete::{ impl_storage, DbHandle };
-//! # #[derive(Default)]
-//! # struct Spreadsheet {
-//! #     a1: SingletonStorage<A1>,
-//! #     a2: SingletonStorage<A2>,
-//! #     b1: SingletonStorage<B1>,
-//! #     b2: SingletonStorage<B2>,
-//! # }
-//! # // This macro may be replaced with a derive proc macro in the future
-//! # impl_storage!(Spreadsheet,
-//! #     a1: A1,
-//! #     a2: A2,
-//! #     b1: B1,
-//! #     b2: B2,
-//! # );
-//! # use inc_complete::define_intermediate;
-//! # define_intermediate!(2, B1 -> i64, Spreadsheet, |_b1: &B1, db: &DbHandle<Spreadsheet>| {
-//! #     // These functions should be pure but we're going to cheat here to
-//! #     // make it obvious when a function is recomputed
-//! #     println!("Computing B1!");
-//! #     db.get(A1) + 8
-//! # });
-//! # // Larger programs may wish to pass an existing function instead of a closure
-//! # define_intermediate!(3, B2 -> i64, Spreadsheet, |_b2, db| {
-//! #     println!("Computing B2!");
-//! #     db.get(B1) + db.get(A2)
-//! # });
-//! use inc_complete::define_input;
-//!
-//! define_input!(0, A1 -> i64, Spreadsheet);
-//! define_input!(1, A2 -> i64, Spreadsheet);
-//! ```
-//!
-//! For intermediate computations we need to provide all of the above, along with a `run` function
-//! to compute their result. This function will have access to the computation type itself
-//! (which often store parameters as data) and a `DbHandle` object to query sub-computations with:
-//!
-//! ```
-//! # #[derive(Clone)]
-//! # struct A1;
-//! # #[derive(Clone)]
-//! # struct A2;
-//! # #[derive(Clone, PartialEq, Eq, Hash)]
-//! # struct B1;
-//! # #[derive(Clone, PartialEq, Eq, Hash)]
-//! # struct B2;
-//! # use inc_complete::storage::SingletonStorage;
-//! # #[derive(Default)]
-//! # struct Spreadsheet {
-//! #     a1: SingletonStorage<A1>,
-//! #     a2: SingletonStorage<A2>,
-//! #     b1: SingletonStorage<B1>,
-//! #     b2: SingletonStorage<B2>,
-//! # }
-//! # // This macro may be replaced with a derive proc macro in the future
-//! # impl_storage!(Spreadsheet,
-//! #     a1: A1,
-//! #     a2: A2,
-//! #     b1: B1,
-//! #     b2: B2,
-//! # );
-//! # use inc_complete::{ define_input, impl_storage };
-//! # define_input!(0, A1 -> i64, Spreadsheet);
-//! # define_input!(1, A2 -> i64, Spreadsheet);
-//! use inc_complete::{ define_intermediate, DbHandle };
-//!
-//! define_intermediate!(2, B1 -> i64, Spreadsheet, |_b1: &B1, db: &DbHandle<Spreadsheet>| {
-//!     // These functions should be pure but we're going to cheat here to
-//!     // make it obvious when a function is recomputed
-//!     println!("Computing B1!");
-//!     db.get(A1) + 8
-//! });
-//!
-//! // Larger programs may wish to pass an existing function instead of a closure
-//! define_intermediate!(3, B2 -> i64, Spreadsheet, |_b2, db| {
-//!     println!("Computing B2!");
-//!     db.get(B1) + db.get(A2)
-//! });
-//! ```
-//!
-//! Ceremony aside - this code should be relatively straight-forward. We `get` the value of
-//! any sub-computations we need and the `DbHandle` object automatically gives us the most
-//! up to date version of those computations - we'll examine this claim a bit closer later.
 //!
 //! With that out of the way though, we can finally create our `Db`, set the initial values for our
 //! inputs, and run our program:
@@ -209,7 +159,7 @@
 //! # struct B2;
 //! # use inc_complete::storage::SingletonStorage;
 //! # #[derive(Default)]
-//! # struct Spreadsheet {
+//! # struct MySpreadsheet {
 //! #     a1: SingletonStorage<A1>,
 //! #     a2: SingletonStorage<A2>,
 //! #     b1: SingletonStorage<B1>,
@@ -217,26 +167,26 @@
 //! # }
 //! # use inc_complete::{ define_input, impl_storage, define_intermediate };
 //! # // This macro may be replaced with a derive proc macro in the future
-//! # impl_storage!(Spreadsheet,
+//! # impl_storage!(MySpreadsheet,
 //! #     a1: A1,
 //! #     a2: A2,
 //! #     b1: B1,
 //! #     b2: B2,
 //! # );
-//! # define_input!(0, A1 -> i64, Spreadsheet);
-//! # define_input!(1, A2 -> i64, Spreadsheet);
-//! # define_intermediate!(2, B1 -> i64, Spreadsheet, |_b1, db| {
+//! # define_input!(0, A1 -> i64, MySpreadsheet);
+//! # define_input!(1, A2 -> i64, MySpreadsheet);
+//! # define_intermediate!(2, B1 -> i64, MySpreadsheet, |_b1, db| {
 //! #     // These functions should be pure but we're going to cheat here to
 //! #     // make it obvious when a function is recomputed
 //! #     println!("Computing B1!");
 //! #     db.get(A1) + 8
 //! # });
 //! # // Larger programs may wish to pass an existing function instead of a closure
-//! # define_intermediate!(3, B2 -> i64, Spreadsheet, |_b2, db| {
+//! # define_intermediate!(3, B2 -> i64, MySpreadsheet, |_b2, db| {
 //! #     println!("Computing B2!");
 //! #     db.get(B1) + db.get(A2)
 //! # });
-//! type SpreadsheetDb = inc_complete::Db<Spreadsheet>;
+//! type SpreadsheetDb = inc_complete::Db<MySpreadsheet>;
 //!
 //! fn main() {
 //!     let mut db = SpreadsheetDb::new();
@@ -291,7 +241,8 @@
 //!         x
 //!     } else {
 //!         // Not exponential time since each sub-computation will be cached!
-//!         db.get(Fibonacci(x - 1)) + db.get(Fibonacci(x - 2))
+//!         // In addition to `db.get(mytype)` we can also do `mytype.get(db)`
+//!         Fibonacci(x - 1).get(db) + Fibonacci(x - 2).get(db)
 //!     }
 //! });
 //! ```
