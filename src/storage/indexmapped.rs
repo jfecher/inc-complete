@@ -68,6 +68,20 @@ where
 
         changed
     }
+
+    fn gc(&mut self, used_cells: &std::collections::HashSet<Cell>) {
+        let guard = Guard::new();
+        for cell in self.cell_to_key.iter(&guard) {
+            if !used_cells.contains(cell.0) {
+                self.cell_to_key.remove(cell.0);
+            }
+        }
+        for cell in self.key_to_cell.iter(&guard) {
+            if !used_cells.contains(cell.1) {
+                self.key_to_cell.remove(cell.0);
+            }
+        }
+    }
 }
 
 impl<K> serde::Serialize for TreeIndexStorage<K>
