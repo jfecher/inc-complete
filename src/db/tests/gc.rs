@@ -27,7 +27,6 @@ impl_storage!(MyData,
 
 define_input!(0, Input -> i64, MyData);
 define_intermediate!(1, TreeStoredData -> i64, MyData, |_, db| {
-    println!("Computing the not-so-Heavy TreeStoredData");
     db.get(Input) * 2
 });
 define_intermediate!(2, HashStoredData -> i64, MyData,
