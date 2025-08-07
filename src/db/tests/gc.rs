@@ -43,8 +43,7 @@ define_intermediate!(2, HashStoredData -> i64, MyData,
 use crate::Db;
 use crate::db::START_VERSION;
 
-// Tests that values from the old computations
-// are removed, shamlessly stolen from basic.rs
+// Tests that values from the old computations are removed.
 #[test]
 fn simple_garbage() {
     let mut db = Db::<MyData>::new();
