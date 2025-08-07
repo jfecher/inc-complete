@@ -59,7 +59,6 @@ where
     }
 
     fn gc(&mut self, used_cells: &std::collections::HashSet<Cell>) {
-        // I don't think there is any point in garbage collecting a singleton storage
         if let Some(this_cell) = self.cell.get() {
             if used_cells.contains(this_cell) {
                 if let Ok(val) = self.value.get_mut() {
