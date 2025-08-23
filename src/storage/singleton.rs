@@ -57,6 +57,16 @@ where
         *guard = Some(new_value);
         changed
     }
+
+    fn gc(&mut self, used_cells: &std::collections::HashSet<Cell>) {
+        if let Some(this_cell) = self.cell.get() {
+            if !used_cells.contains(this_cell) {
+                if let Ok(val) = self.value.get_mut() {
+                    *val = None;
+                }
+            }
+        }
+    }
 }
 
 impl<K> serde::Serialize for SingletonStorage<K>
