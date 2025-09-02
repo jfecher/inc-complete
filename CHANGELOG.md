@@ -1,3 +1,8 @@
+# 0.7.1
+
+- Updated inc-complete-derive version. 0.7.0 incorrectly did not ship with 0.7.0 of inc-complete derive which
+causes issues when deriving `Storage`.
+
 # 0.7.0
 
 0.7.0 Adds accumulated values
