@@ -1,3 +1,38 @@
+# 0.7.0
+
+0.7.0 Adds accumulated values
+
+## Breaking:
+
+- The syntax in `impl_storage!` has changed to require a comma after the last field.
+- The experimental `async` feature has been removed.
+
+## Non-breaking:
+
+- Added `inc_complete::accumulate::{ Accumulate, Accumulator }`:
+  - Query all accumulated values with `Db::get_accumulated`, collecting into any `FromIterator` type.
+  Accumulated items are returned in dependency-order with the exception that all items within a single
+  dependency are considered to be pushed at the end of that dependency. This means accumulated values
+  from a parent computation are never interleaved between those of its child computations.
+  - Use the `Accumulator<MyType>` wrapper in your storage to enable accumulating `MyType`.
+    - Requires adding the following to the end of your `impl_storage!` macro:
+    ```
+    impl_storage!(MyStorage,
+        ...
+        // Add the following lines to enable accumulating for `MyType`
+        @accumulators {
+            my_accumulator_field_name: MyType,
+            ... more accumulators ...
+        }
+    );
+    ```
+    - If you use the derive macros, add `#[inc_complete(accumulate)]` above your
+    struct field:
+    ```
+    #[inc_complete(accumulate)]
+    my_accumulator_field_name: Accumulator<MyType>,
+    ```
+
 # 0.6.2
 
 - Added `derive` macros as alternatives to the current `macro_rules!` macros.

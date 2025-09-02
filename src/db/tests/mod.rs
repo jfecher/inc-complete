@@ -1,6 +1,6 @@
 #![cfg(test)]
-#![cfg(not(feature = "async"))]
 
+mod accumulated;
 mod basic;
 mod div0;
 mod early_cutoff;

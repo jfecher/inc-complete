@@ -14,7 +14,7 @@
 /// # #[derive(Clone)]
 /// # struct MyInput;
 /// # define_input!(0, MyInput -> i32, MyStorageType);
-/// # impl_storage!(MyStorageType, input:MyInput, double:Double, more:More);
+/// # impl_storage!(MyStorageType, input:MyInput, double:Double, more:More,);
 /// ##[derive(Clone)]
 /// struct Double;
 /// ##[derive(Clone)]
@@ -34,7 +34,6 @@
 ///     db.get(Double) + 1
 /// });
 /// ```
-#[cfg(not(feature = "async"))]
 #[macro_export]
 macro_rules! define_intermediate {
     ( $id:tt, $type_name:ident -> $output_type:ty, $( $storage_type:ty )|+, $run_function:expr) => {
@@ -77,45 +76,6 @@ macro_rules! define_intermediate {
     };
 }
 
-#[cfg(feature = "async")]
-#[macro_export]
-macro_rules! define_intermediate {
-    ( $id:tt, $type_name:ident -> $output_type:ty, $( $storage_type:ty )|+, $run_function:expr) => {
-        define_intermediate!(@ $id, $type_name -> $output_type, false, $( $storage_type )|+, $run_function);
-    };
-    ( $id:tt, assume_changed $type_name:ident -> $output_type:ty, $( $storage_type:ty )|+, $run_function:expr) => {
-        define_intermediate!(@ $id, $type_name -> $output_type, true, $( $storage_type )|+, $run_function);
-    };
-    (@ $id:tt, $type_name:ident -> $output_type:ty, $assume_changed:expr, $( $storage_type:ty )|+, $run_function:expr) => {
-        impl $crate::OutputType for $type_name {
-            type Output = $output_type;
-            const IS_INPUT: bool = false;
-            const ASSUME_CHANGED: bool = $assume_changed;
-        }
-
-        impl $crate::ComputationId for $type_name {
-            fn computation_id() -> u32 {
-                $id
-            }
-        }
-
-        impl $type_name {
-            #[allow(unused)]
-            pub fn get(self, db: &impl $crate::DbGet<$type_name>) -> impl Future<Output = $output_type> + Send {
-                db.get(self)
-            }
-        }
-
-        $(
-        impl $crate::Run<$storage_type> for $type_name {
-            fn run<'db>(&self, db: &$crate::DbHandle<'db, $storage_type>) -> impl Future<Output = $output_type> {
-                $run_function(self, db)
-            }
-        }
-        )+
-    };
-}
-
 /// Helper macro to define an input computation type.
 /// This will implement `OutputType`, `ComputationId`, and `Run`.
 /// Note that the `Run` implementation will panic by default with a message that
@@ -131,7 +91,7 @@ macro_rules! define_intermediate {
 /// ```
 /// # use inc_complete::{ define_intermediate, define_input, storage::SingletonStorage, impl_storage, DbHandle };
 /// # struct MyStorageType { input: SingletonStorage<MyInput>, double: SingletonStorage<Double> }
-/// # impl_storage!(MyStorageType, input:MyInput,double:Double);
+/// # impl_storage!(MyStorageType, input:MyInput,double:Double,);
 /// # #[derive(Clone)]
 /// # struct Double;
 /// # define_intermediate!(1, Double -> i32, MyStorageType, |_: &Double, db: &DbHandle<MyStorageType>| {
@@ -198,16 +158,21 @@ macro_rules! define_input {
 /// ```
 /// use inc_complete::{ impl_storage, define_input, define_intermediate };
 /// use inc_complete::storage::{ SingletonStorage, HashMapStorage };
+/// use inc_complete::accumulate::{ Accumulator, Accumulate };
 ///
 /// ##[derive(Default)]
 /// struct MyStorage {
 ///     foos: SingletonStorage<Foo>,
 ///     bars: HashMapStorage<Bar>,
+///     logs: Accumulator<Log>,
 /// }
 ///
 /// impl_storage!(MyStorage,
 ///     foos: Foo,
 ///     bars: Bar,
+///     @accumulators {
+///         logs: Log,
+///     }
 /// );
 ///
 /// // Each input & intermediate computation should implement Clone
@@ -221,12 +186,16 @@ macro_rules! define_input {
 /// define_intermediate!(1, Bar -> usize, MyStorage, |bar, db| {
 ///     bar.0.len() + db.get(Foo)
 /// });
+///
+/// // Accumulated values need to derive Eq and Clone
+/// #[derive(PartialEq, Eq, Clone)]
+/// struct Log;
 /// ```
 ///
 /// Note that using this macro requires each computation type to implement `Clone`.
 #[macro_export]
 macro_rules! impl_storage {
-    ($typ:ty, $( $field:ident : $computation_type:ty ),* $(, )? ) => {
+    ($typ:ty, $( $field:ident : $computation_type:ty, )* $(@accumulators { $($acc_field:ident : $acc_type:ty, )* })?  ) => {
         impl $crate::Storage for $typ {
             fn output_is_unset(&self, cell: $crate::Cell, computation_id: u32) -> bool {
                 use $crate::StorageFor;
@@ -275,10 +244,23 @@ macro_rules! impl_storage {
                 self.$field.gc(used_cells);
             }
         })*
+
+        $($(
+        impl $crate::accumulate::Accumulate<$acc_type> for $typ {
+            fn accumulate(&self, cell: $crate::Cell, item: $acc_type) {
+                self.$acc_field.accumulate(cell, item)
+            }
+
+            fn get_accumulated<Items>(&self, cells: &[$crate::Cell]) -> Items
+                where Items: FromIterator<$acc_type>
+            {
+                self.$acc_field.get_accumulated(cells)
+            }
+        }
+        )*)?
     };
 }
 
-#[cfg(not(feature = "async"))]
 #[doc(hidden)]
 #[macro_export]
 macro_rules! run_computation {
@@ -289,26 +271,6 @@ macro_rules! run_computation {
                 $(
                     x if x == <$computation_type as $crate::ComputationId>::computation_id() => {
                         let new_value = db.storage().$field.get_input(cell).run(db);
-                        db.storage().$field.update_output(cell, new_value)
-                    }
-                )*
-                id => panic!("Unknown computation id: {id}"),
-            }
-        }
-    }
-}
-
-#[cfg(feature = "async")]
-#[doc(hidden)]
-#[macro_export]
-macro_rules! run_computation {
-    ( $($field:ident: $computation_type:ty),* ) => {
-        async fn run_computation<'db>(db: &$crate::DbHandle<'db, Self>, cell: $crate::Cell, computation_id: u32) -> bool {
-            use $crate::{ StorageFor, Run };
-            match computation_id {
-                $(
-                    x if x == <$computation_type as $crate::ComputationId>::computation_id() => {
-                        let new_value = db.storage().$field.get_input(cell).run(db).await;
                         db.storage().$field.update_output(cell, new_value)
                     }
                 )*

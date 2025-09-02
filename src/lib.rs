@@ -229,7 +229,8 @@
 //!     fibs: HashMapStorage<Fibonacci>,
 //! }
 //!
-//! impl_storage!(MyStorageType, fibs: Fibonacci);
+//! // The trailing `,` is required after each field type
+//! impl_storage!(MyStorageType, fibs: Fibonacci,);
 //!
 //! // a fibonacci function with cached sub-results
 //! #[derive(Clone, PartialEq, Eq, Hash)]
@@ -261,6 +262,7 @@
 mod cell;
 #[macro_use]
 pub mod storage;
+pub mod accumulate;
 mod db;
 mod interned;
 

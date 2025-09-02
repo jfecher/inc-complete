@@ -28,20 +28,10 @@ pub trait Storage: Sized {
 
     /// For the computation type with the given computation id, run the computation
     /// with the corresponding Cell, returning true if the result changed from its previous value.
-    #[cfg(not(feature = "async"))]
     fn run_computation(db: &DbHandle<Self>, cell: Cell, computation_id: u32) -> bool;
 
+    /// Shrink the storage by removing any data not in use by the given cells
     fn gc(&mut self, used_cells: &std::collections::HashSet<Cell>);
-    /// For the computation type with the given computation id, run the computation
-    /// with the corresponding Cell, returning true if the result changed from its previous value.
-    #[cfg(feature = "async")]
-    fn run_computation<'db>(
-        db: &DbHandle<'db, Self>,
-        cell: Cell,
-        computation_id: u32,
-    ) -> impl Future<Output = bool> + Send
-    where
-        Self: Sync;
 }
 
 /// This trait is implemented by a type storing a single computation type `C`.
@@ -82,11 +72,5 @@ pub trait OutputType {
 }
 
 pub trait Run<Storage>: OutputType {
-    #[cfg(not(feature = "async"))]
     fn run(&self, db: &DbHandle<Storage>) -> Self::Output;
-
-    #[cfg(feature = "async")]
-    fn run<'db>(&self, db: &DbHandle<'db, Storage>) -> impl Future<Output = Self::Output>
-    where
-        Storage: Sync;
 }

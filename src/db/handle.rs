@@ -1,6 +1,5 @@
 use crate::{
-    Cell, Db, OutputType, Storage,
-    storage::{ComputationId, StorageFor},
+    accumulate::Accumulate, storage::{ComputationId, StorageFor}, Cell, Db, OutputType, Storage
 };
 
 use super::DbGet;
@@ -41,13 +40,23 @@ impl<'db, S> DbHandle<'db, S> {
 impl<S: Storage> DbHandle<'_, S> {
     /// Locking behavior: This function locks the cell corresponding to the given computation. This
     /// can cause a deadlock if the computation recursively depends on itself.
-    #[cfg(not(feature = "async"))]
     pub fn get<C: OutputType + ComputationId>(&self, compute: C) -> C::Output
     where
         S: StorageFor<C>,
     {
         // Register the dependency
         let dependency = self.db.get_or_insert_cell(compute);
+        self.update_and_register_dependency(dependency);
+
+        // Fetch the current value of the dependency, running it if out of date
+        self.db.get_with_cell(dependency)
+    }
+
+    /// Registers the given cell as a dependency, running it and updating any required metadata
+    fn update_and_register_dependency<C: OutputType + ComputationId>(&self, dependency: Cell)
+    where
+        S: StorageFor<C>,
+    {
         let mut cell = self.db.cells.get_mut(&self.current_operation).unwrap();
 
         // If `dependency` is an input it must be remembered both as a dependency
@@ -61,8 +70,8 @@ impl<S: Storage> DbHandle<'_, S> {
 
         drop(cell);
 
-        // Fetch the current value of the dependency
-        let output = self.db.get_with_cell(dependency);
+        // Run the computation to update its dependencies before we query them afterward
+        self.db.update_cell(dependency);
 
         let dependency = self.db.cells.get(&dependency).unwrap();
         let dependency_inputs = dependency.input_dependencies.clone();
@@ -72,47 +81,52 @@ impl<S: Storage> DbHandle<'_, S> {
         for input in dependency_inputs {
             cell.input_dependencies.insert(input);
         }
-
-        output
     }
 
-    #[cfg(feature = "async")]
-    pub fn get<C: OutputType + ComputationId>(
-        &self,
-        compute: C,
-    ) -> impl Future<Output = C::Output> + Send
-    where
-        S: StorageFor<C> + Sync,
+    /// Accumulate an item in the current computation. This item can be retrieved along
+    /// with all other accumulated items in this computation and its dependencies via
+    /// a call to `get_accumulated`.
+    ///
+    /// This is most often used for operations like pushing diagnostics or logs.
+    pub fn accumulate<Item>(&self, item: Item) where
+        S: Accumulate<Item>
     {
-        // Register the dependency
-        let dependency = self.db.get_or_insert_cell(compute);
-        let mut cell = self.db.cells.get(&self.current_operation).unwrap();
-        cell.dependencies.push(dependency);
-        drop(cell);
+        self.storage().accumulate(self.current_operation, item);
+    }
 
-        // Fetch the current value of the dependency
-        self.db.get_with_cell(dependency)
+    /// Retrieve an accumulated value in a container of the user's choice.
+    /// This will return all the accumulated items after the given computation.
+    ///
+    /// Note that although this method will not re-perform the given computation,
+    /// it will re-collect all the required accumulated items each time it is called,
+    /// which may be costly for large dependency trees.
+    ///
+    /// This is most often used for operations like retrieving diagnostics or logs.
+    ///
+    /// FIXME: This method is private to the crate until the bug in tracking
+    /// accumulated values is fixed (see src/db/tests/accumulated.rs). Use the
+    /// version on a full `Db` in the meantime which does not require dependency tracking.
+    #[allow(unused)]
+    pub(crate) fn get_accumulated<Container, Item, C>(&self, compute: C) -> Container where
+        Container: FromIterator<Item>,
+        S: Accumulate<Item> + StorageFor<C>,
+        C: OutputType + ComputationId
+    {
+        // Ensure the dependency is registered.
+        let cell_id = self.db.get_or_insert_cell(compute);
+        let _ = self.update_and_register_dependency(cell_id);
+
+        let cells = self.db.collect_all_dependencies(cell_id);
+        self.storage().get_accumulated(&cells)
     }
 }
 
-#[cfg(not(feature = "async"))]
 impl<'db, S, C> DbGet<C> for DbHandle<'db, S>
 where
     C: OutputType + ComputationId,
     S: Storage + StorageFor<C>,
 {
     fn get(&self, key: C) -> C::Output {
-        self.get(key)
-    }
-}
-
-#[cfg(feature = "async")]
-impl<'db, S, C> DbGet<C> for DbHandle<'db, S>
-where
-    C: OutputType + ComputationId,
-    S: Storage + StorageFor<C> + Sync,
-{
-    fn get(&self, key: C) -> impl Future<Output = C::Output> + Send {
         self.get(key)
     }
 }

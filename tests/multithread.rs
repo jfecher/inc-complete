@@ -1,4 +1,3 @@
-#![cfg(not(feature = "async"))]
 use inc_complete::{Db, DbHandle, define_intermediate, impl_storage, storage::HashMapStorage};
 
 #[derive(Default)]

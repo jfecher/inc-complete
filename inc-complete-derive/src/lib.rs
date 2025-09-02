@@ -336,6 +336,7 @@ pub fn derive_storage(input: TokenStream) -> TokenStream {
 
     // Extract computation types from storage fields
     let mut field_mappings = Vec::new();
+    let mut accumulated = Vec::new();
 
     for field in fields {
         let field_name = field.ident.as_ref().unwrap();
@@ -343,6 +344,7 @@ pub fn derive_storage(input: TokenStream) -> TokenStream {
 
         // Parse attributes
         let mut skip_field = false;
+        let mut is_accumulated = false;
         let mut manual_computation_type: Option<Type> = None;
 
         for attr in &field.attrs {
@@ -352,18 +354,17 @@ pub fn derive_storage(input: TokenStream) -> TokenStream {
                         // Parse nested attributes like #[inc_complete(skip)] or #[inc_complete(computation = Type)]
                         let nested_result =
                             list.parse_args_with(|parser: syn::parse::ParseStream| {
-                                let mut found_skip = false;
-                                let mut found_computation_type: Option<Type> = None;
-
                                 while !parser.is_empty() {
                                     let lookahead = parser.lookahead1();
                                     if lookahead.peek(syn::Ident) {
                                         let ident: syn::Ident = parser.parse()?;
                                         if ident == "skip" {
-                                            found_skip = true;
+                                            skip_field = true;
                                         } else if ident == "computation" {
                                             parser.parse::<syn::Token![=]>()?;
-                                            found_computation_type = Some(parser.parse()?);
+                                            manual_computation_type = Some(parser.parse()?);
+                                        } else if ident == "accumulate" {
+                                            is_accumulated = true;
                                         } else {
                                             return Err(syn::Error::new_spanned(
                                                 ident,
@@ -379,21 +380,11 @@ pub fn derive_storage(input: TokenStream) -> TokenStream {
                                     }
                                 }
 
-                                Ok((found_skip, found_computation_type))
+                                Ok(())
                             });
 
-                        match nested_result {
-                            Ok((found_skip, found_computation_type)) => {
-                                if found_skip {
-                                    skip_field = true;
-                                }
-                                if let Some(computation_type) = found_computation_type {
-                                    manual_computation_type = Some(computation_type);
-                                }
-                            }
-                            Err(e) => {
-                                return e.to_compile_error().into();
-                            }
+                        if let Err(e) = nested_result {
+                            return e.to_compile_error().into();
                         }
                     }
                     _ => {
@@ -429,12 +420,17 @@ pub fn derive_storage(input: TokenStream) -> TokenStream {
             .into();
         };
 
-        field_mappings.push(quote! { #field_name: #computation_type });
+        let item = quote! { #field_name: #computation_type, };
+        if is_accumulated {
+            accumulated.push(item);
+        } else {
+            field_mappings.push(item);
+        }
     }
 
     // Generate a call to impl_storage! macro
     let expanded = quote! {
-        inc_complete::impl_storage!(#struct_name, #(#field_mappings),*);
+        inc_complete::impl_storage!(#struct_name, #(#field_mappings)* @accumulators { #(#accumulated)* });
     };
 
     TokenStream::from(expanded)

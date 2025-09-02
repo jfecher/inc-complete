@@ -16,7 +16,7 @@ struct MyData {
 
 impl_storage!(MyData,
     input: Input,
-    output: Output
+    output: Output,
 );
 
 define_input!(0, Input -> i64, MyData);

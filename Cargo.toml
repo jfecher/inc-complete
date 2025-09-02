@@ -6,7 +6,7 @@ resolver = "2"
 
 [package]
 name = "inc-complete"
-version = "0.6.2"
+version = "0.7.0"
 edition = "2024"
 authors = ["Jake Fecher <jfecher11@gmail.com>"]
 readme = "README.md"
@@ -16,16 +16,13 @@ description = "A library for writing incremental computations that re-execute th
 repository = "https://github.com/jfecher/inc-complete"
 documentation = "https://docs.rs/inc-complete"
 
-[features]
-async = []
-
 [dependencies]
 dashmap = "6.1.0"
 parking_lot = "0.12.4"
 rustc-hash = "2.1.1"
 scc = { version = "2.3.4", features = ["serde"] }
 serde = { version = "1.0", features = ["derive", "rc"] }
-inc-complete-derive = { version = "0.6.2", path = "inc-complete-derive" }
+inc-complete-derive = { version = "0.7.0", path = "inc-complete-derive" }
 
 [dev-dependencies]
 serde_json = "1.0"
