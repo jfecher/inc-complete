@@ -112,7 +112,7 @@ impl<S: Storage> Db<S> {
         }
     }
 
-    fn handle(&self, cell: Cell) -> DbHandle<S> {
+    fn handle(&self, cell: Cell) -> DbHandle<'_, S> {
         DbHandle::new(self, cell)
     }
 

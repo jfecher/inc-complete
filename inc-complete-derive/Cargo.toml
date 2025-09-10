@@ -1,6 +1,6 @@
 [package]
 name = "inc-complete-derive"
-version = "0.7.0"
+version = "0.7.2"
 edition = "2024"
 authors = ["Jake Fecher <jfecher11@gmail.com>"]
 readme = "../README.md"

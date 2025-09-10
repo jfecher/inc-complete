@@ -1,6 +1,5 @@
 use inc_complete::{
-    Db, Input, Storage, define_input, define_intermediate, intermediate,
-    storage::SingletonStorage,
+    accumulate::Accumulator, define_input, define_intermediate, intermediate, storage::SingletonStorage, Db, Input, Storage
 };
 
 // Simple calculator storage
@@ -16,6 +15,9 @@ struct Calculator {
     #[inc_complete(skip)]
     #[allow(unused)]
     dummy: u32,
+
+    #[inc_complete(accumulate)]
+    logs: Accumulator<String>,
 }
 
 // Input A

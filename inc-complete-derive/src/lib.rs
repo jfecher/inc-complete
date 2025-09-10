@@ -80,14 +80,12 @@ fn parse_flag_attribute(path: &syn::Path, expected_name: &str) -> syn::Result<bo
 }
 
 /// Extract generic type T from Container<T>
-fn extract_generic_type(ty: &Type, container_suffix: &str) -> Option<Type> {
+fn extract_generic_type(ty: &Type) -> Option<Type> {
     if let Type::Path(TypePath { path, .. }) = ty {
         if let Some(segment) = path.segments.last() {
-            if segment.ident.to_string().ends_with(container_suffix) {
-                if let PathArguments::AngleBracketed(args) = &segment.arguments {
-                    if let Some(GenericArgument::Type(inner_type)) = args.args.first() {
-                        return Some(inner_type.clone());
-                    }
+            if let PathArguments::AngleBracketed(args) = &segment.arguments {
+                if let Some(GenericArgument::Type(inner_type)) = args.args.first() {
+                    return Some(inner_type.clone());
                 }
             }
         }
@@ -408,7 +406,7 @@ pub fn derive_storage(input: TokenStream) -> TokenStream {
         let computation_type = if let Some(manual_type) = manual_computation_type {
             // Use manually specified type
             manual_type
-        } else if let Some(extracted_type) = extract_generic_type(field_type, "Storage") {
+        } else if let Some(extracted_type) = extract_generic_type(field_type) {
             // Try to extract the generic type from SingletonStorage<T>, HashMapStorage<T>, etc.
             extracted_type
         } else {
