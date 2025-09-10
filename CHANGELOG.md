@@ -1,3 +1,7 @@
+# 0.7.3
+
+- Update version of `inc-complete-derive` in main inc-complete package
+
 # 0.7.2
 
 - Fix `#[inc_complete(accumulate)]` tag to correctly infer the accumulated type as `T` for any container shaped like `Container<T>`.
