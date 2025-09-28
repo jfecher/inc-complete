@@ -2,18 +2,14 @@
 
 use std::{sync::atomic::AtomicU32, time::Duration};
 
-use inc_complete::{Db, DbHandle, define_intermediate, impl_storage, storage::HashMapStorage};
+use inc_complete::{define_intermediate, storage::HashMapStorage, Db, DbHandle, Storage};
 
-#[derive(Default)]
+#[derive(Default, Storage)]
 struct Context {
     sub1: HashMapStorage<Sub1>,
 }
 
-impl_storage!(Context,
-    sub1: Sub1,
-);
-
-#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 struct Sub1(u64);
 define_intermediate!(0, Sub1 -> u64, Context, sub1);
 

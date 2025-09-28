@@ -1,19 +1,19 @@
 use serde::{Deserialize, ser::SerializeStruct};
 
-use super::{OutputType, StorageFor};
+use super::{Computation, StorageFor};
 use crate::Cell;
 
 /// Helper to store a simple computation type which has no fields and thus
 /// does not require a map to cache each possible value.
 ///
 /// Examples include `struct SourceFile;` or `struct Time;`
-pub struct SingletonStorage<K: OutputType> {
+pub struct SingletonStorage<K: Computation> {
     cell: std::sync::OnceLock<Cell>,
     key: std::sync::OnceLock<K>,
     value: std::sync::Mutex<Option<K::Output>>,
 }
 
-impl<K: OutputType> Default for SingletonStorage<K> {
+impl<K: Computation> Default for SingletonStorage<K> {
     fn default() -> Self {
         Self {
             cell: Default::default(),
@@ -25,7 +25,7 @@ impl<K: OutputType> Default for SingletonStorage<K> {
 
 impl<K> StorageFor<K> for SingletonStorage<K>
 where
-    K: OutputType + Clone,
+    K: Computation + Clone,
     K::Output: Eq + Clone,
 {
     fn get_cell_for_computation(&self, _: &K) -> Option<Cell> {
@@ -43,8 +43,8 @@ where
             .unwrap_or_else(|_| panic!("insert_new_cell: cell already initialized"));
     }
 
-    fn get_input(&self, _: Cell) -> K {
-        self.key.get().unwrap().clone()
+    fn try_get_input(&self, _: Cell) -> Option<K> {
+        self.key.get().cloned()
     }
 
     fn get_output(&self, _: Cell) -> Option<K::Output> {
@@ -71,7 +71,7 @@ where
 
 impl<K> serde::Serialize for SingletonStorage<K>
 where
-    K: serde::Serialize + OutputType,
+    K: serde::Serialize + Computation,
     K::Output: serde::Serialize,
 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -96,7 +96,7 @@ where
 
 impl<'de, K> serde::Deserialize<'de> for SingletonStorage<K>
 where
-    K: serde::Deserialize<'de> + OutputType,
+    K: serde::Deserialize<'de> + Computation,
     K::Output: serde::Deserialize<'de>,
 {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -109,7 +109,7 @@ where
 }
 
 #[derive(Deserialize)]
-struct SerializeWrapper<K: OutputType> {
+struct SerializeWrapper<K: Computation> {
     #[serde(default)]
     cell: Option<Cell>,
 
@@ -126,7 +126,7 @@ fn none<T>() -> Option<T> {
     None
 }
 
-impl<K: OutputType> SerializeWrapper<K> {
+impl<K: Computation> SerializeWrapper<K> {
     fn into_storage(self) -> SingletonStorage<K> {
         let cell = match self.cell {
             Some(cell) => std::sync::OnceLock::from(cell),

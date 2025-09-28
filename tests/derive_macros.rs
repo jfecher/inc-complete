@@ -21,17 +21,17 @@ struct Calculator {
 }
 
 // Input A
-#[derive(Clone, Input)]
+#[derive(Debug, Clone, Input)]
 #[inc_complete(id = 0, output = i32, storage = Calculator)]
 struct InputA;
 
 // Input B
-#[derive(Clone, Input)]
+#[derive(Debug, Clone, Input)]
 #[inc_complete(id = 1, output = i32, storage = Calculator)]
 struct InputB;
 
 // Sum computation
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct Sum;
 
 #[intermediate(id = 2)]

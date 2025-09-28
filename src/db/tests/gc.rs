@@ -2,10 +2,10 @@ use crate::{StorageFor, define_input, define_intermediate, impl_storage};
 
 use crate::storage::{HashMapStorage, TreeIndexStorage};
 
-#[derive(Clone, PartialEq, Eq, Ord, PartialOrd)]
+#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd)]
 struct Output(i32);
 
-#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 struct Input(i32);
 
 #[derive(Default)]

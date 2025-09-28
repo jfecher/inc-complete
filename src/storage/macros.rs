@@ -1,5 +1,5 @@
 /// Helper macro to define an intermediate computation type.
-/// This will implement `OutputType`, `ComputationId`, and `Run`.
+/// This will implement `Computation`, and `Run`.
 ///
 /// This macro supports multiple `Storage` types used, separated by `|`,
 /// in case your program uses multiple databases with differing storage types.
@@ -11,13 +11,13 @@
 /// ```
 /// # use inc_complete::{ define_intermediate, define_input, storage::SingletonStorage, impl_storage, DbHandle };
 /// # struct MyStorageType { input: SingletonStorage<MyInput>, double: SingletonStorage<Double>, more: SingletonStorage<More> }
-/// # #[derive(Clone)]
+/// # #[derive(Debug, Clone)]
 /// # struct MyInput;
 /// # define_input!(0, MyInput -> i32, MyStorageType);
 /// # impl_storage!(MyStorageType, input:MyInput, double:Double, more:More,);
-/// ##[derive(Clone)]
+/// ##[derive(Debug, Clone)]
 /// struct Double;
-/// ##[derive(Clone)]
+/// ##[derive(Debug, Clone)]
 /// struct More;
 ///
 /// // Define `Double` as a computation with id 1 and the given run function which returns an `i32`
@@ -43,13 +43,11 @@ macro_rules! define_intermediate {
         define_intermediate!(@ $id, $type_name -> $output_type, true, $( $storage_type )|+, $run_function);
     };
     (@ $id:tt, $type_name:ident -> $output_type:ty, $assume_changed:expr, $( $storage_type:ty )|+, $run_function:expr) => {
-        impl $crate::OutputType for $type_name {
+        impl $crate::Computation for $type_name {
             type Output = $output_type;
             const IS_INPUT: bool = false;
             const ASSUME_CHANGED: bool = $assume_changed;
-        }
 
-        impl $crate::ComputationId for $type_name {
             fn computation_id() -> u32 {
                 $id
             }
@@ -77,7 +75,7 @@ macro_rules! define_intermediate {
 }
 
 /// Helper macro to define an input computation type.
-/// This will implement `OutputType`, `ComputationId`, and `Run`.
+/// This will implement `Computation` and `Run`.
 /// Note that the `Run` implementation will panic by default with a message that
 /// `update_input` should have been called beforehand.
 ///
@@ -92,12 +90,12 @@ macro_rules! define_intermediate {
 /// # use inc_complete::{ define_intermediate, define_input, storage::SingletonStorage, impl_storage, DbHandle };
 /// # struct MyStorageType { input: SingletonStorage<MyInput>, double: SingletonStorage<Double> }
 /// # impl_storage!(MyStorageType, input:MyInput,double:Double,);
-/// # #[derive(Clone)]
+/// # #[derive(Debug, Clone)]
 /// # struct Double;
 /// # define_intermediate!(1, Double -> i32, MyStorageType, |_: &Double, db: &DbHandle<MyStorageType>| {
 /// #     db.get(MyInput) * 2
 /// # });
-/// ##[derive(Clone)]
+/// ##[derive(Debug, Clone)]
 /// struct MyInput;
 ///
 /// // Define `MyInput` as an input computation with id 0 and an `i32` value
@@ -113,13 +111,11 @@ macro_rules! define_input {
         define_input!(@ $id, $type_name -> $output_type, true, $( $storage_type )|+);
     };
     (@ $id:tt, $type_name:ident -> $output_type:ty, $assume_changed:expr, $( $storage_type:ty )|+ ) => {
-        impl $crate::OutputType for $type_name {
+        impl $crate::Computation for $type_name {
             type Output = $output_type;
             const IS_INPUT: bool = true;
             const ASSUME_CHANGED: bool = $assume_changed;
-        }
 
-        impl $crate::ComputationId for $type_name {
             fn computation_id() -> u32 {
                 $id
             }
@@ -175,20 +171,20 @@ macro_rules! define_input {
 ///     }
 /// );
 ///
-/// // Each input & intermediate computation should implement Clone
-/// ##[derive(Clone)]
+/// // Each input & intermediate computation should implement Debug & Clone
+/// ##[derive(Debug, Clone)]
 /// struct Foo;
 /// define_input!(0, Foo -> usize, MyStorage);
 ///
 /// // HashMapStorage requires Eq and Hash
-/// ##[derive(Clone, PartialEq, Eq, Hash)]
+/// ##[derive(Debug, Clone, PartialEq, Eq, Hash)]
 /// struct Bar(std::rc::Rc<String>);
 /// define_intermediate!(1, Bar -> usize, MyStorage, |bar, db| {
 ///     bar.0.len() + db.get(Foo)
 /// });
 ///
-/// // Accumulated values need to derive Eq and Clone
-/// #[derive(PartialEq, Eq, Clone)]
+/// // Accumulated values need to derive Eq, Clone, and Debug
+/// #[derive(Debug, PartialEq, Eq, Clone)]
 /// struct Log;
 /// ```
 ///
@@ -201,7 +197,7 @@ macro_rules! impl_storage {
                 use $crate::StorageFor;
                 match computation_id {
                     $(
-                        x if x == <$computation_type as $crate::ComputationId>::computation_id() => {
+                        x if x == <$computation_type as $crate::Computation>::computation_id() => {
                             self.$field.get_output(cell).is_none()
                         },
                     )*
@@ -216,6 +212,17 @@ macro_rules! impl_storage {
                     self.$field.gc(&used_cells);
                 )*
             }
+
+            fn input_debug_string(&self, cell: $crate::Cell) -> String {
+                use $crate::StorageFor;
+                $(
+                    if let Some(input) = self.$field.try_get_input(cell) {
+                        return format!("{input:?}");
+                    }
+                )*
+
+                panic!("inc-complete internal error: input_debug_string: {cell:?} not found")
+            }
         }
 
         $(
@@ -228,15 +235,15 @@ macro_rules! impl_storage {
                 self.$field.insert_new_cell(cell, key)
             }
 
-            fn get_input(&self, cell: $crate::Cell) -> $computation_type {
-                self.$field.get_input(cell)
+            fn try_get_input(&self, cell: $crate::Cell) -> Option<$computation_type> {
+                self.$field.try_get_input(cell)
             }
 
-            fn get_output(&self, cell: $crate::Cell) -> Option<<$computation_type as $crate::OutputType>::Output> {
+            fn get_output(&self, cell: $crate::Cell) -> Option<<$computation_type as $crate::Computation>::Output> {
                 self.$field.get_output(cell)
             }
 
-            fn update_output(&self, cell: $crate::Cell, new_value: <$computation_type as $crate::OutputType>::Output) -> bool {
+            fn update_output(&self, cell: $crate::Cell, new_value: <$computation_type as $crate::Computation>::Output) -> bool {
                 self.$field.update_output(cell, new_value)
             }
 
@@ -269,7 +276,7 @@ macro_rules! run_computation {
             use $crate::{ StorageFor, Run };
             match computation_id {
                 $(
-                    x if x == <$computation_type as $crate::ComputationId>::computation_id() => {
+                    x if x == <$computation_type as $crate::Computation>::computation_id() => {
                         let new_value = db.storage().$field.get_input(cell).run(db);
                         db.storage().$field.update_output(cell, new_value)
                     }

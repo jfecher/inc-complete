@@ -3,11 +3,11 @@ use dashmap::DashMap;
 use crate::{Cell, storage::StorageFor};
 use std::hash::{BuildHasher, Hash};
 
-use super::OutputType;
+use super::Computation;
 
 pub struct HashMapStorage<K, Hasher = rustc_hash::FxBuildHasher>
 where
-    K: OutputType + Eq + Hash,
+    K: Computation + Eq + Hash,
     Hasher: BuildHasher,
 {
     key_to_cell: DashMap<K, Cell, Hasher>,
@@ -16,7 +16,7 @@ where
 
 impl<K, H> Default for HashMapStorage<K, H>
 where
-    K: OutputType + Eq + Hash,
+    K: Computation + Eq + Hash,
     H: Default + BuildHasher + Clone,
 {
     fn default() -> Self {
@@ -29,7 +29,7 @@ where
 
 impl<K, H> StorageFor<K> for HashMapStorage<K, H>
 where
-    K: Clone + Eq + Hash + OutputType,
+    K: Clone + Eq + Hash + Computation,
     K::Output: Eq + Clone,
     H: BuildHasher + Clone,
 {
@@ -40,6 +40,11 @@ where
     fn insert_new_cell(&self, cell: Cell, key: K) {
         self.key_to_cell.insert(key.clone(), cell);
         self.cell_to_key.insert(cell, (key, None));
+    }
+
+    fn try_get_input(&self, cell: Cell) -> Option<K> {
+        let key_ref = self.cell_to_key.get(&cell)?;
+        Some(key_ref.0.clone())
     }
 
     fn get_input(&self, cell: Cell) -> K {
@@ -70,7 +75,7 @@ where
 
 impl<K, H> serde::Serialize for HashMapStorage<K, H>
 where
-    K: serde::Serialize + OutputType + Eq + Hash + Clone,
+    K: serde::Serialize + Computation + Eq + Hash + Clone,
     K::Output: serde::Serialize + Clone,
     H: BuildHasher + Clone,
 {
@@ -93,7 +98,7 @@ where
 
 impl<'de, K, H> serde::Deserialize<'de> for HashMapStorage<K, H>
 where
-    K: serde::Deserialize<'de> + Hash + Eq + OutputType + Clone,
+    K: serde::Deserialize<'de> + Hash + Eq + Computation + Clone,
     K::Output: serde::Deserialize<'de>,
     H: Default + BuildHasher + Clone,
 {

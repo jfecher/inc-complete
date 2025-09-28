@@ -26,14 +26,14 @@ impl_storage!(Compiler,
     }
 );
 
-#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 struct File(i32);
 define_input!(0, File -> i32, Compiler);
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 struct Error(i32);
 
-#[derive(Clone, Hash, PartialEq, Eq, Ord, PartialOrd)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, Ord, PartialOrd)]
 struct Parse(i32);
 define_intermediate!(1, Parse -> i32, Compiler, |ctx, db| {
     let file_number = File(ctx.0).get(db);
@@ -41,7 +41,7 @@ define_intermediate!(1, Parse -> i32, Compiler, |ctx, db| {
     file_number
 });
 
-#[derive(Clone, Hash, PartialEq, Eq, Ord, PartialOrd)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, Ord, PartialOrd)]
 struct Resolve(i32);
 define_intermediate!(2, Resolve -> i32, Compiler, |ctx, db| {
     let file_number = Parse(ctx.0 + 1).get(db);
@@ -52,7 +52,7 @@ define_intermediate!(2, Resolve -> i32, Compiler, |ctx, db| {
 });
 
 /// Returns a differing number of errors based on the input but always returns 0
-#[derive(Clone, Hash, PartialEq, Eq, Ord, PartialOrd)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, Ord, PartialOrd)]
 struct MessUpErrorCount;
 define_intermediate!(3, MessUpErrorCount -> i32, Compiler, |_, db| {
     let file_number = File(0).get(db);
@@ -64,7 +64,7 @@ define_intermediate!(3, MessUpErrorCount -> i32, Compiler, |_, db| {
 
 /// Computations that depend on accumulated values of other computations may be incorrectly
 /// not updated if their dependencies' accumulated values change but not their return value.
-#[derive(Clone, Hash, PartialEq, Eq, Ord, PartialOrd)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, Ord, PartialOrd)]
 struct ErrorCount;
 define_intermediate!(4, ErrorCount -> usize, Compiler, |_, db| {
     let errors: Vec<_> = db.get_accumulated(MessUpErrorCount);

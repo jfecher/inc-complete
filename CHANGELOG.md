@@ -1,3 +1,19 @@
+# 0.8.0
+
+0.8.0 Adds cycle detection panics instead of blocking on mutexes forever.
+
+## Breaking:
+
+- `StorageFor` now requires an additional `try_get_input` method.
+- `OutputType` and `ComputationId` have been merged into a single `Computation` trait.
+- All `Computation` types now require `Debug` to be implemented, bringing the total traits required to `Debug` and `Clone`.
+
+## Non-breaking:
+
+- New "Cycle Detected" errors when a computation depends on itself directly or indirectly. Each computation
+  in the cycle is displayed using its `Debug` implementation.
+- `StorageFor::get_input` is now implemented by default in terms of `StorageFor::try_get_input`.
+
 # 0.7.3
 
 - Update version of `inc-complete-derive` in main inc-complete package

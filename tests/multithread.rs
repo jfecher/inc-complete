@@ -1,17 +1,12 @@
-use inc_complete::{Db, DbHandle, define_intermediate, impl_storage, storage::HashMapStorage};
+use inc_complete::{define_intermediate, storage::HashMapStorage, Db, DbHandle, Storage};
 
-#[derive(Default)]
+#[derive(Default, Storage)]
 struct Context {
     div4s: HashMapStorage<Div4>,
     div_all: HashMapStorage<DivAll>,
 }
 
-impl_storage!(Context,
-    div4s: Div4,
-    div_all: DivAll,
-);
-
-#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 struct Div4(u64);
 define_intermediate!(0, Div4 -> u64, Context, div4);
 
@@ -23,7 +18,7 @@ fn div4(this: &Div4, db: &DbHandle<Context>) -> u64 {
     }
 }
 
-#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 struct DivAll(u64, u64, u64, u64);
 define_intermediate!(1, DivAll -> u64, Context, div_all);
 

@@ -1,5 +1,5 @@
 use crate::{
-    accumulate::Accumulate, storage::{ComputationId, StorageFor}, Cell, Db, OutputType, Storage
+    accumulate::Accumulate, storage::StorageFor, Cell, Db, Computation, Storage
 };
 
 use super::DbGet;
@@ -40,7 +40,7 @@ impl<'db, S> DbHandle<'db, S> {
 impl<S: Storage> DbHandle<'_, S> {
     /// Locking behavior: This function locks the cell corresponding to the given computation. This
     /// can cause a deadlock if the computation recursively depends on itself.
-    pub fn get<C: OutputType + ComputationId>(&self, compute: C) -> C::Output
+    pub fn get<C: Computation>(&self, compute: C) -> C::Output
     where
         S: StorageFor<C>,
     {
@@ -53,7 +53,7 @@ impl<S: Storage> DbHandle<'_, S> {
     }
 
     /// Registers the given cell as a dependency, running it and updating any required metadata
-    fn update_and_register_dependency<C: OutputType + ComputationId>(&self, dependency: Cell)
+    fn update_and_register_dependency<C: Computation>(&self, dependency: Cell)
     where
         S: StorageFor<C>,
     {
@@ -63,6 +63,7 @@ impl<S: Storage> DbHandle<'_, S> {
         // and as an input dependency. Otherwise we cannot differentiate between
         // computations which directly depend on inputs and those that only indirectly
         // depend on them.
+        // TODO: Check if we should filter out already-inserted dependencies
         cell.dependencies.push(dependency);
         if C::IS_INPUT {
             cell.input_dependencies.insert(dependency);
@@ -110,7 +111,7 @@ impl<S: Storage> DbHandle<'_, S> {
     pub(crate) fn get_accumulated<Container, Item, C>(&self, compute: C) -> Container where
         Container: FromIterator<Item>,
         S: Accumulate<Item> + StorageFor<C>,
-        C: OutputType + ComputationId
+        C: Computation
     {
         // Ensure the dependency is registered.
         let cell_id = self.db.get_or_insert_cell(compute);
@@ -123,7 +124,7 @@ impl<S: Storage> DbHandle<'_, S> {
 
 impl<'db, S, C> DbGet<C> for DbHandle<'db, S>
 where
-    C: OutputType + ComputationId,
+    C: Computation,
     S: Storage + StorageFor<C>,
 {
     fn get(&self, key: C) -> C::Output {

@@ -20,7 +20,7 @@ impl PartialEq for CountedValue {
 
 impl Eq for CountedValue {}
 
-#[derive(Clone, Input)]
+#[derive(Debug, Clone, Input)]
 #[inc_complete(
     id = 0,
     assume_changed,
@@ -29,7 +29,7 @@ impl Eq for CountedValue {}
 )]
 struct Input;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct AssumeChangedComputation;
 
 #[derive(Default, Storage)]

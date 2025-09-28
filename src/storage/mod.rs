@@ -32,6 +32,11 @@ pub trait Storage: Sized {
 
     /// Shrink the storage by removing any data not in use by the given cells
     fn gc(&mut self, used_cells: &std::collections::HashSet<Cell>);
+
+    /// Return a Debug String representation of the Computation referred to by the given cell.
+    ///
+    /// Used by inc-complete to label components of a cycle when a cycle is detected.
+    fn input_debug_string(&self, cell: Cell) -> String;
 }
 
 /// This trait is implemented by a type storing a single computation type `C`.
@@ -39,16 +44,21 @@ pub trait Storage: Sized {
 ///
 /// To implement this efficiently, most types implementing this are two-way maps
 /// from `C` to `Cell` and from `Cell` to `(C, Option<C::Output>)`.
-pub trait StorageFor<C: OutputType> {
+pub trait StorageFor<C: Computation> {
     /// Given a computation key, return the cell associated with it, if it exists.
     fn get_cell_for_computation(&self, key: &C) -> Option<Cell>;
 
     /// Insert a new Cell with the given computation that has yet to be run
     fn insert_new_cell(&self, cell: Cell, key: C);
 
+    /// Retrieve the input for this computation, returning `None` if not found.
+    fn try_get_input(&self, cell: Cell) -> Option<C>;
+
     /// Retrieve the input for this computation.
     /// The input is expected to already be inserted into this storage.
-    fn get_input(&self, cell: Cell) -> C;
+    fn get_input(&self, cell: Cell) -> C {
+        self.try_get_input(cell).expect("inc-complete internal error: get_input: expected input to be set")
+    }
 
     /// Retrieve the output for the given cell, if it exists
     fn get_output(&self, cell: Cell) -> Option<C::Output>;
@@ -61,16 +71,14 @@ pub trait StorageFor<C: OutputType> {
     fn gc(&mut self, used_cells: &std::collections::HashSet<Cell>);
 }
 
-pub trait ComputationId {
-    fn computation_id() -> u32;
-}
-
-pub trait OutputType {
+pub trait Computation: std::fmt::Debug {
     type Output;
     const IS_INPUT: bool;
     const ASSUME_CHANGED: bool;
+
+    fn computation_id() -> u32;
 }
 
-pub trait Run<Storage>: OutputType {
+pub trait Run<Storage>: Computation {
     fn run(&self, db: &DbHandle<Storage>) -> Self::Output;
 }

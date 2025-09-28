@@ -2,14 +2,15 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 use crate::accumulate::Accumulate;
 use crate::cell::CellData;
-use crate::storage::{ComputationId, StorageFor};
-use crate::{Cell, OutputType, Storage};
+use crate::storage::StorageFor;
+use crate::{Cell, Computation, Storage};
 
 mod handle;
 mod serialize;
 mod tests;
 
 pub use handle::DbHandle;
+use rustc_hash::FxHashSet;
 
 const START_VERSION: u32 = 1;
 
@@ -39,7 +40,7 @@ impl<S: Default> Default for Db<S> {
 
 /// Abstracts over the `get` function provided by `Db<S>` and `DbHandle<S>` to avoid
 /// providing `get` and `get_db` variants for each function.
-pub trait DbGet<C: OutputType> {
+pub trait DbGet<C: Computation> {
     /// Run an incremental computation `C` and return its output.
     /// If `C` is already cached, no computation will be performed.
     fn get(&self, key: C) -> C::Output;
@@ -47,7 +48,7 @@ pub trait DbGet<C: OutputType> {
 
 impl<S, C> DbGet<C> for Db<S>
 where
-    C: OutputType + ComputationId,
+    C: Computation,
     S: Storage + StorageFor<C>,
 {
     fn get(&self, key: C) -> C::Output {
@@ -84,7 +85,7 @@ impl<S: Storage> Db<S> {
     /// Return the corresponding Cell for a given computation, if it exists.
     ///
     /// This will not update any values.
-    fn get_cell<C: OutputType>(&self, computation: &C) -> Option<Cell>
+    fn get_cell<C: Computation>(&self, computation: &C) -> Option<Cell>
     where
         S: StorageFor<C>,
     {
@@ -93,7 +94,7 @@ impl<S: Storage> Db<S> {
 
     pub(crate) fn get_or_insert_cell<C>(&self, input: C) -> Cell
     where
-        C: OutputType + ComputationId,
+        C: Computation,
         S: StorageFor<C>,
     {
         if let Some(cell) = self.get_cell(&input) {
@@ -118,7 +119,7 @@ impl<S: Storage> Db<S> {
 
     #[cfg(test)]
     #[allow(unused)]
-    pub(crate) fn with_cell_data<C: OutputType>(&self, input: &C, f: impl FnOnce(&CellData))
+    pub(crate) fn with_cell_data<C: Computation>(&self, input: &C, f: impl FnOnce(&CellData))
     where
         S: StorageFor<C>,
     {
@@ -161,7 +162,7 @@ impl<S: Storage> Db<S> {
     /// Panics if the given computation is not an input - ie. panics if it has at least 1 dependency.
     pub fn update_input<C>(&mut self, input: C, new_value: C::Output)
     where
-        C: OutputType + ComputationId,
+        C: Computation,
         S: StorageFor<C>,
     {
         let cell_id = self.get_or_insert_cell(input);
@@ -192,7 +193,7 @@ impl<S: Storage> Db<S> {
     /// Computations which have never been computed are also considered stale.
     ///
     /// Note that this may re-compute dependencies of the given computation.
-    pub fn is_stale<C: OutputType>(&self, input: &C) -> bool
+    pub fn is_stale<C: Computation>(&self, input: &C) -> bool
     where
         S: StorageFor<C>,
     {
@@ -278,6 +279,10 @@ impl<S: Storage> Db<S> {
                     }
                     None => {
                         // This computation is already being run in another thread.
+                        // Before blocking and waiting, since we have time, check for a cycle and
+                        // issue and panic if found.
+                        self.check_for_cycle(cell_id);
+
                         // Block until it finishes and return the result
                         drop(lock.lock());
                     }
@@ -289,6 +294,59 @@ impl<S: Storage> Db<S> {
         }
     }
 
+    /// Perform a DFS to check for a cycle, panicking if found
+    fn check_for_cycle(&self, starting_cell: Cell) {
+        let mut visited = FxHashSet::default();
+        let mut path = Vec::new();
+
+        // We're going to push actions to this stack. Most actions will be pushing
+        // a dependency cell to track as the next node in the graph, but some will be
+        // pop actions for popping the top node off the current path. If we encounter
+        // a node which is already in the current path, we have found a cycle.
+        let mut stack = Vec::new();
+        stack.push(Action::Traverse(starting_cell));
+
+        enum Action {
+            Traverse(Cell),
+            Pop(Cell),
+        }
+
+        while let Some(action) = stack.pop() {
+            match action {
+                // This assert_eq is never expected to fail
+                Action::Pop(expected) => assert_eq!(path.pop(), Some(expected)),
+                Action::Traverse(cell) => {
+                    if path.contains(&cell) {
+                        // Include the same cell twice so the cycle is more clear to users
+                        path.push(cell);
+                        self.cycle_error(&path);
+                    }
+
+                    if visited.insert(cell) {
+                        path.push(cell);
+                        stack.push(Action::Pop(cell));
+                        self.with_cell(cell, |cell| {
+                            for dependency in cell.dependencies.iter() {
+                                stack.push(Action::Traverse(*dependency));
+                            }
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    /// Issue an error with the given cycle
+    /// TODO: Use a more useful Debug impl of each computation item instead of the cell ids.
+    fn cycle_error(&self, cycle: &[Cell]) {
+        // Panic note: A cycle must always be non-empty
+        let mut error = self.storage.input_debug_string(cycle[0]);
+        for cell in cycle.iter().skip(1) {
+            error += &format!(" -> {}", self.storage.input_debug_string(*cell));
+        }
+        panic!("inc-complete: Cycle Detected!\n\nCycle:\n  {error}")
+    }
+
     /// Retrieves the up to date value for the given computation, re-running any dependencies as
     /// necessary.
     ///
@@ -296,7 +354,7 @@ impl<S: Storage> Db<S> {
     ///
     /// Locking behavior: This function locks the cell corresponding to the given computation. This
     /// can cause a deadlock if the computation recursively depends on itself.
-    pub fn get<C: OutputType + ComputationId>(&self, compute: C) -> C::Output
+    pub fn get<C: Computation>(&self, compute: C) -> C::Output
     where
         S: StorageFor<C>,
     {
@@ -304,7 +362,7 @@ impl<S: Storage> Db<S> {
         self.get_with_cell::<C>(cell_id)
     }
 
-    pub(crate) fn get_with_cell<Concrete: OutputType>(&self, cell_id: Cell) -> Concrete::Output
+    pub(crate) fn get_with_cell<Concrete: Computation>(&self, cell_id: Cell) -> Concrete::Output
     where
         S: StorageFor<Concrete>,
     {
@@ -360,7 +418,7 @@ impl<S: Storage> Db<S> {
     pub fn get_accumulated<Container, Item, C>(&self, compute: C) -> Container where
         Container: FromIterator<Item>,
         S: Accumulate<Item> + StorageFor<C>,
-        C: OutputType + ComputationId
+        C: Computation
     {
         let cell_id = self.get_or_insert_cell(compute);
 

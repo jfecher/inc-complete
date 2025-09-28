@@ -19,10 +19,10 @@ impl PartialEq for CountedValue {
 
 impl Eq for CountedValue {}
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct Input;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct AssumeChangedComputation;
 
 #[derive(Default)]

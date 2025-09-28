@@ -5,26 +5,27 @@ number of steps when an input is changed. Example uses:
 
 - Compilers: re-compile only the portion of a program which has changed
 - Spreadsheets: re-compute only formulas which rely on changed cells
+- Memoization: while this can be used for memoization, it is a rather heavy-handed solution since it also tracks dependencies across every memoized function.
 
 ## Status
 
-This library is in an early but working state. Expect the API to change over time, and
-expect certain patterns to be somewhat obtuse. Additionally, while serialization is working,
-the format is not currently stable across releases of inc-complete.
+This library is working but in a pre-1.0 state. Expect the API to change over time.
+Additionally, while serialization is working, the format is not currently stable across non-bugfix releases of inc-complete.
+See the CHANGELOG.md for changes for each version.
 
 ## Current Features
 
 - [x] Load from disk
-  - Manual save and load to disk to restart from where the previous program run left off.
-  - Just serialize and deserialize the central `Db` object.
+  - Manual save and load to disk to restart from where the previous program run left off
+  - Just serialize and deserialize the central `Db` object
 - [x] Thread-safe
+- [x] Accumulator abstraction for collecting lists of items across computations (useful for compiler errors)
+- [x] Cyclical dependency check - an error is issued when computations recursively depend on each other. Works even if computations are run on separate threads
+- [x] Manually invoked garbage collection for old cached computation results
 
 ## Planned Features & Roadmap
 
-- [ ] Accumulator abstraction for collecting lists of items across computations (useful for compiler errors)
-- [ ] Support for interning arbitrary data
-- [ ] Cyclical dependency check for debugging
-- [ ] Manually invoked garbage collection for old cached computation results
+- [ ] Support for interning arbitrary data (computations and results must currently be cloned)
 
 ## Quick Start
 

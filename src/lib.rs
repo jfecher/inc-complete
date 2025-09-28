@@ -34,11 +34,15 @@
 //! # struct MySpreadsheet;
 //! use inc_complete::{ Input, define_input };
 //!
-//! ##[derive(Input, Clone)]
+//! // All computation types must implement Debug and Clone.
+//! // Each input type must additionally implement `Input`, which requires an additional
+//! // `inc_complete` attribute to specify the unique id of the computation, its output type,
+//! // and the storage type to store it in.
+//! ##[derive(Input, Debug, Clone)]
 //! ##[inc_complete(id = 0, output = i32, storage = MySpreadsheet)]
 //! struct A1;
 //!
-//! ##[derive(Input, Clone)]
+//! ##[derive(Input, Debug, Clone)]
 //! ##[inc_complete(id = 1, output = i32, storage = MySpreadsheet)]
 //! struct A2;
 //! ```
@@ -51,14 +55,12 @@
 //!
 //! ```
 //! # use inc_complete::{ Input, define_input, Storage, impl_storage };
-//! # #[derive(Input, Clone)]
+//! # #[derive(Debug, Input, Clone)]
 //! # #[inc_complete(id = 0, output = i32, storage = MySpreadsheet)]
 //! # struct A1;
-//! # #[derive(Input, Clone)]
+//! # #[derive(Debug, Input, Clone)]
 //! # #[inc_complete(id = 1, output = i32, storage = MySpreadsheet)]
 //! # struct A2;
-//! # #[derive(Clone)]
-//! # struct B1;
 //! # use inc_complete::storage::SingletonStorage;
 //! # #[derive(Storage, Default)]
 //! # struct MySpreadsheet {
@@ -71,6 +73,13 @@
 //! # }
 //! use inc_complete::{ intermediate, define_intermediate };
 //!
+//! // All Computation types must implement Debug & Clone
+//! # #[derive(Debug, Clone)]
+//! # struct B1;
+//!
+//! ##[derive(Debug, Clone)]
+//! struct B2;
+//!
 //! ##[intermediate(id = 2)]
 //! fn compute_b1(_ctx: &B1, db: &inc_complete::DbHandle<MySpreadsheet>) -> i32 {
 //!     // These functions should be pure but we're going to cheat here to
@@ -79,10 +88,7 @@
 //!     db.get(A1) + 8
 //! }
 //!
-//! ##[derive(Clone)]
-//! struct B2;
-//!
-//! ##[intermediate(id = 2)]
+//! ##[intermediate(id = 3)]
 //! fn compute_b2(_ctx: &B2, db: &inc_complete::DbHandle<MySpreadsheet>) -> i32 {
 //!     println!("Computing B2!");
 //!     db.get(B1) + db.get(A2)
@@ -96,13 +102,13 @@
 //! Now we can define the actual storage type to hold all our computations. 
 //!
 //! ```
-//! # #[derive(Clone)]
+//! # #[derive(Debug, Clone)]
 //! # struct A1;
-//! # #[derive(Clone)]
+//! # #[derive(Debug, Clone)]
 //! # struct A2;
-//! # #[derive(Clone, PartialEq, Eq, Hash)]
+//! # #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 //! # struct B1;
-//! # #[derive(Clone, PartialEq, Eq, Hash)]
+//! # #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 //! # struct B2;
 //! # use inc_complete::storage::SingletonStorage;
 //! # use inc_complete::define_input;
@@ -149,13 +155,13 @@
 //! inputs, and run our program:
 //!
 //! ```
-//! # #[derive(Clone)]
+//! # #[derive(Debug, Clone)]
 //! # struct A1;
-//! # #[derive(Clone)]
+//! # #[derive(Debug, Clone)]
 //! # struct A2;
-//! # #[derive(Clone, PartialEq, Eq, Hash)]
+//! # #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 //! # struct B1;
-//! # #[derive(Clone, PartialEq, Eq, Hash)]
+//! # #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 //! # struct B2;
 //! # use inc_complete::storage::SingletonStorage;
 //! # #[derive(Default)]
@@ -233,7 +239,7 @@
 //! impl_storage!(MyStorageType, fibs: Fibonacci,);
 //!
 //! // a fibonacci function with cached sub-results
-//! #[derive(Clone, PartialEq, Eq, Hash)]
+//! #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 //! struct Fibonacci(u32);
 //!
 //! define_intermediate!(0, Fibonacci -> u32, MyStorageType, |fib, db| {
@@ -268,6 +274,6 @@ mod interned;
 
 pub use cell::Cell;
 pub use db::{Db, DbGet, DbHandle};
-pub use storage::{ComputationId, OutputType, Run, Storage, StorageFor};
+pub use storage::{Computation, Run, Storage, StorageFor};
 
 pub use inc_complete_derive::{Input, Storage, intermediate};
