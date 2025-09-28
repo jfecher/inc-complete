@@ -43,8 +43,16 @@ where
             .unwrap_or_else(|_| panic!("insert_new_cell: cell already initialized"));
     }
 
-    fn try_get_input(&self, _: Cell) -> Option<K> {
-        self.key.get().cloned()
+    fn try_get_input(&self, cell: Cell) -> Option<K> {
+        if cell == self.cell.get().cloned()? {
+            self.key.get().cloned()
+        } else {
+            None
+        }
+    }
+
+    fn get_input(&self, _: Cell) -> K {
+        self.key.get().cloned().unwrap()
     }
 
     fn get_output(&self, _: Cell) -> Option<K::Output> {

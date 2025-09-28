@@ -1,3 +1,7 @@
+# 0.8.1
+
+- Fix: `SingletonStorage::try_get_input` no longer always returns `Some`.
+
 # 0.8.0
 
 0.8.0 Adds cycle detection panics instead of blocking on mutexes forever.

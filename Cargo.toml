@@ -6,7 +6,7 @@ resolver = "2"
 
 [package]
 name = "inc-complete"
-version = "0.8.0"
+version = "0.8.1"
 edition = "2024"
 authors = ["Jake Fecher <jfecher11@gmail.com>"]
 readme = "README.md"
