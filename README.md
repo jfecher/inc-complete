@@ -18,6 +18,7 @@ See the CHANGELOG.md for changes for each version.
 - [x] Load from disk
   - Manual save and load to disk to restart from where the previous program run left off
   - Just serialize and deserialize the central `Db` object
+- [x] Fast - see https://github.com/jfecher/incremental-benchmark
 - [x] Thread-safe
 - [x] Accumulator abstraction for collecting lists of items across computations (useful for compiler errors)
 - [x] Cyclical dependency check - an error is issued when computations recursively depend on each other. Works even if computations are run on separate threads
