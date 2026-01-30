@@ -38,9 +38,8 @@ where
             "Overwriting previous singleton value - are you using SingleStorage<{}> with a non-singleton type?",
             std::any::type_name::<K>()
         );
-        self.key
-            .set(key)
-            .unwrap_or_else(|_| panic!("insert_new_cell: cell already initialized"));
+        let result = self.key.set(key);
+        result.unwrap_or_else(|_| panic!("insert_new_cell: cell already initialized"));
     }
 
     fn try_get_input(&self, cell: Cell) -> Option<K> {

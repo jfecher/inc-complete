@@ -97,6 +97,7 @@ where
             cells,
             version: AtomicU32::new(db.version),
             next_cell: AtomicU32::new(db.next_cell),
+            cell_locks: Default::default(),
             storage: db.storage,
         })
     }

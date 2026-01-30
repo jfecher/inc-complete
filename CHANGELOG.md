@@ -1,3 +1,7 @@
+# 0.8.2
+
+- Fix: The same computation will no longer sometimes be assigned separate IDs internally, causing it to be unnecessarily rerun.
+
 # 0.8.1
 
 - Fix: `SingletonStorage::try_get_input` no longer always returns `Some`.

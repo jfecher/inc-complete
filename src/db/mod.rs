@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use crate::accumulate::Accumulate;
@@ -10,6 +11,7 @@ mod serialize;
 mod tests;
 
 pub use handle::DbHandle;
+use parking_lot::Mutex;
 use rustc_hash::FxHashSet;
 
 const START_VERSION: u32 = 1;
@@ -23,6 +25,10 @@ pub struct Db<Storage> {
     version: AtomicU32,
     next_cell: AtomicU32,
     storage: Storage,
+
+    /// Lock used when acquiring new Cells to ensure the same data isn't assigned
+    /// multiple ids concurrently. Maps computation_id to each lock.
+    cell_locks: dashmap::DashMap<u32, Arc<Mutex<()>>>,
 }
 
 impl<Storage: Default> Db<Storage> {
@@ -63,6 +69,7 @@ impl<S> Db<S> {
             cells: Default::default(),
             version: AtomicU32::new(START_VERSION),
             next_cell: AtomicU32::new(0),
+            cell_locks: Default::default(),
             storage,
         }
     }
@@ -97,11 +104,13 @@ impl<S: Storage> Db<S> {
         C: Computation,
         S: StorageFor<C>,
     {
+        let computation_id = C::computation_id();
+        let lock = self.cell_locks.entry(computation_id).or_default().clone();
+        let _guard = lock.lock();
+
         if let Some(cell) = self.get_cell(&input) {
             cell
         } else {
-            let computation_id = C::computation_id();
-
             // We just need a unique ID here, we don't care about ordering between
             // threads, so we're using Ordering::Relaxed.
             let cell_id = self.next_cell.fetch_add(1, Ordering::Relaxed);
@@ -134,7 +143,6 @@ impl<S: Storage> Db<S> {
         self.version.load(Ordering::SeqCst)
     }
 
-    
     pub fn gc(&mut self, version: u32) {
         let used_cells: std::collections::HashSet<Cell> = self
             .cells
@@ -149,7 +157,7 @@ impl<S: Storage> Db<S> {
             .collect();
 
         self.storage.gc(&used_cells);
-    } 
+    }
 }
 
 impl<S: Storage> Db<S> {
@@ -415,10 +423,11 @@ impl<S: Storage> Db<S> {
     /// which may be costly for large dependency trees.
     ///
     /// This is most often used for operations like retrieving diagnostics or logs.
-    pub fn get_accumulated<Container, Item, C>(&self, compute: C) -> Container where
+    pub fn get_accumulated<Container, Item, C>(&self, compute: C) -> Container
+    where
         Container: FromIterator<Item>,
         S: Accumulate<Item> + StorageFor<C>,
-        C: Computation
+        C: Computation,
     {
         let cell_id = self.get_or_insert_cell(compute);
 
