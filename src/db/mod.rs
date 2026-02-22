@@ -9,6 +9,7 @@ use crate::{Cell, Computation, Storage};
 mod handle;
 mod serialize;
 mod tests;
+pub mod debug_with_db;
 
 pub use handle::DbHandle;
 use parking_lot::Mutex;
@@ -345,14 +346,12 @@ impl<S: Storage> Db<S> {
     }
 
     /// Issue an error with the given cycle
-    /// TODO: Use a more useful Debug impl of each computation item instead of the cell ids.
     fn cycle_error(&self, cycle: &[Cell]) {
-        // Panic note: A cycle must always be non-empty
-        let mut error = self.storage.input_debug_string(cycle[0]);
-        for cell in cycle.iter().skip(1) {
-            error += &format!(" -> {}", self.storage.input_debug_string(*cell));
+        let mut error = String::new();
+        for (i, cell) in cycle.iter().enumerate() {
+            error += &format!("\n  {}. {}", i + 1, self.storage.input_debug_string(self, *cell));
         }
-        panic!("inc-complete: Cycle Detected!\n\nCycle:\n  {error}")
+        panic!("inc-complete: Cycle Detected!\n\nCycle:{error}")
     }
 
     /// Retrieves the up to date value for the given computation, re-running any dependencies as

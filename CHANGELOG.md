@@ -1,3 +1,11 @@
+# 0.8.3
+
+- Debug formatting when reporting cycle errors has been improved. It should be easier to read longer cycles now.
+- New `DebugWithDb` trait which can be optionally implemented on computation types to provide more human-readable output particularly when computation types are wrappers for unique IDs.
+  - For example, a type like `SourceFileId { crate_id: 1234, file_id: 5678 }` will now be able to retrieve information from a `&Db<Storage>` object to output, e.g. `foo/bar.rs`.
+  - If not implemented explicitly, a type's `Debug` formatting will be used by default.
+  - Types cannot currently implement both `Debug` and `DebugWithDb`.
+
 # 0.8.2
 
 - Fix: The same computation will no longer sometimes be assigned separate IDs internally, causing it to be unnecessarily rerun.

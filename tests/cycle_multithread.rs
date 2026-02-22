@@ -31,10 +31,11 @@ fn foo(ctx: &Foo, db: &DbHandle<MyStorage>) -> u32 {
         Ok(_) => panic!("Ran cycle on Foo({}) without error!", ctx.0),
         Err(message) => {
             if let Some(message) = message.downcast_ref::<String>() {
-                // The false thread will panic with Foo(false) -> Foo(true) -> Foo(false), while the
-                // true thread will panic with Foo(true) -> Foo(false) -> Foo(true). This needs
+                // The false thread will panic with `1. Foo(false)\n  2. Foo(true)\n  3. Foo(false)`, while the
+                // true thread will panic with `1. Foo(true)\n  2. Foo(false)\n  3. Foo(true)`. This needs
                 // to return true for both.
-                assert!(message.contains("Foo(false) -> Foo(true)"));
+                assert!(message.contains("Foo(false)"));
+                assert!(message.contains("Foo(true)"));
                 println!("Caught cycle panic on thread {:?}", std::thread::current().id());
                 ASSERTS_PASSED.fetch_add(1, Ordering::Relaxed);
             } else {

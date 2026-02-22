@@ -1,4 +1,4 @@
-use crate::{Cell, DbHandle};
+use crate::{Cell, Db, DbHandle};
 
 mod hashmapped;
 mod indexmapped;
@@ -36,7 +36,7 @@ pub trait Storage: Sized {
     /// Return a Debug String representation of the Computation referred to by the given cell.
     ///
     /// Used by inc-complete to label components of a cycle when a cycle is detected.
-    fn input_debug_string(&self, cell: Cell) -> String;
+    fn input_debug_string(&self, db: &Db<Self>, cell: Cell) -> String;
 }
 
 /// This trait is implemented by a type storing a single computation type `C`.
@@ -71,7 +71,7 @@ pub trait StorageFor<C: Computation> {
     fn gc(&mut self, used_cells: &std::collections::HashSet<Cell>);
 }
 
-pub trait Computation: std::fmt::Debug {
+pub trait Computation {
     type Output;
     const IS_INPUT: bool;
     const ASSUME_CHANGED: bool;

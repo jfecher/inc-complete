@@ -273,7 +273,7 @@ mod db;
 mod interned;
 
 pub use cell::Cell;
-pub use db::{Db, DbGet, DbHandle};
+pub use db::{Db, DbGet, DbHandle, debug_with_db::{ DebugWithDb, debug_with_db }};
 pub use storage::{Computation, Run, Storage, StorageFor};
 
 pub use inc_complete_derive::{Input, Storage, intermediate};

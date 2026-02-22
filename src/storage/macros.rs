@@ -213,11 +213,11 @@ macro_rules! impl_storage {
                 )*
             }
 
-            fn input_debug_string(&self, cell: $crate::Cell) -> String {
+            fn input_debug_string(&self, db: &$crate::Db<Self>, cell: $crate::Cell) -> String {
                 use $crate::StorageFor;
                 $(
                     if let Some(input) = self.$field.try_get_input(cell) {
-                        return format!("{input:?}");
+                        return format!("{:?}", $crate::debug_with_db(&input, db));
                     }
                 )*
 
