@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use crate::accumulate::Accumulate;
+use crate::accumulate::Accumulated;
 use crate::cell::CellData;
 use crate::storage::StorageFor;
 use crate::{Cell, Computation, Storage};
@@ -384,53 +384,18 @@ impl<S: Storage> Db<S> {
         f(&self.cells.get(&cell).unwrap())
     }
 
-    /// Fill the given set with all cells directly or indirectly used as dependencies
-    /// for the given cell. To ensure dependencies are up to date, this may run
-    /// any stale dependencies.
-    fn collect_all_dependencies(&self, operation: Cell) -> Vec<Cell> {
-        // Ensure all dependencies are up to date
-        self.update_cell(operation);
-
-        let mut queue: Vec<_> = self.with_cell(operation, |cell| {
-            cell.dependencies.iter().copied().collect()
-        });
-
-        let mut cells = Vec::new();
-        cells.push(operation);
-
-        // We must be careful to preserve dependency order in `cells`.
-        // This is easiest if we push from last-to-first and reverse `cells` later.
-        while let Some(dependency) = queue.pop() {
-            cells.push(dependency);
-
-            self.with_cell(dependency, |cell| {
-                for dependency in cell.dependencies.iter() {
-                    queue.push(*dependency);
-                }
-            });
-        }
-
-        cells.reverse();
-        cells
-    }
-
-    /// Retrieve an accumulated value in a container of the user's choice.
-    /// This will return all the accumulated items after the given computation.
-    ///
-    /// Note that although this method will not re-perform the given computation,
-    /// it will re-collect all the required accumulated items each time it is called,
-    /// which may be costly for large dependency trees.
+    /// Retrieve each accumulated value of the given type after the given computation is run.
+    /// Subsequent calls to this for the same computation or dependencies will be cached.
     ///
     /// This is most often used for operations like retrieving diagnostics or logs.
-    pub fn get_accumulated<Container, Item, C>(&self, compute: C) -> Container
+    pub fn get_accumulated<Item, C>(&self, compute: C) -> Vec<Item>
     where
-        Container: FromIterator<Item>,
-        S: Accumulate<Item> + StorageFor<C>,
+        S: StorageFor<C> + StorageFor<Accumulated<Item>>,
         C: Computation,
+        Item: 'static,
     {
         let cell_id = self.get_or_insert_cell(compute);
-
-        let cells = self.collect_all_dependencies(cell_id);
-        self.storage.get_accumulated(&cells)
+        self.update_cell(cell_id);
+        self.get(Accumulated::<Item>::new(cell_id))
     }
 }

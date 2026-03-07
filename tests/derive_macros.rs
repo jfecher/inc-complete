@@ -1,5 +1,5 @@
 use inc_complete::{
-    accumulate::Accumulator, define_input, define_intermediate, intermediate, storage::SingletonStorage, Db, Input, Storage
+    Db, Input, Storage, accumulate::{ Accumulated, Accumulator }, define_input, define_intermediate, intermediate, storage::{HashMapStorage, SingletonStorage}
 };
 
 // Simple calculator storage
@@ -15,6 +15,8 @@ struct Calculator {
     #[inc_complete(skip)]
     #[allow(unused)]
     dummy: u32,
+
+    log_storage: HashMapStorage<Accumulated<String>>,
 
     #[inc_complete(accumulate)]
     logs: Accumulator<String>,

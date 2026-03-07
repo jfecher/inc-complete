@@ -1,4 +1,4 @@
-use crate::accumulate::Accumulator;
+use crate::accumulate::{ Accumulated, Accumulator };
 use crate::{define_input, define_intermediate, impl_storage, Db};
 
 use crate::storage::HashMapStorage;
@@ -10,6 +10,7 @@ struct Compiler {
     resolves: HashMapStorage<Resolve>,
     mess_up_error_counts: HashMapStorage<MessUpErrorCount>,
     error_count: HashMapStorage<ErrorCount>,
+    error_storage: HashMapStorage<Accumulated<Error>>,
 
     errors: Accumulator<Error>,
 }
@@ -20,6 +21,7 @@ impl_storage!(Compiler,
     resolves: Resolve,
     mess_up_error_counts: MessUpErrorCount,
     error_count: ErrorCount,
+    error_storage: Accumulated<Error>,
 
     @accumulators {
         errors: Error,
@@ -51,7 +53,7 @@ define_intermediate!(2, Resolve -> i32, Compiler, |ctx, db| {
     file_number
 });
 
-/// Returns a differing number of errors based on the input but always returns 0
+/// Accumulate a differing number of errors based on the input but always returns 0
 #[derive(Debug, Clone, Hash, PartialEq, Eq, Ord, PartialOrd)]
 struct MessUpErrorCount;
 define_intermediate!(3, MessUpErrorCount -> i32, Compiler, |_, db| {
@@ -94,7 +96,8 @@ fn basic_accumulators() {
     assert_eq!(errors, vec![Error(5)]);
 }
 
-/// Documenting the bug for when it is fixed in the future
+/// Regression test for past bug before accumulators were publically available
+/// from a `DbHandle`.
 #[test]
 fn accumulators_broken_on_update_without_return_value_update() {
     let mut db = Db::<Compiler>::new();

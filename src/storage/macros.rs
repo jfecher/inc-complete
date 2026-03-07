@@ -258,10 +258,10 @@ macro_rules! impl_storage {
                 self.$acc_field.accumulate(cell, item)
             }
 
-            fn get_accumulated<Items>(&self, cells: &[$crate::Cell]) -> Items
+            fn get_accumulated<Items>(&self, cell: $crate::Cell) -> Items
                 where Items: FromIterator<$acc_type>
             {
-                self.$acc_field.get_accumulated(cells)
+                self.$acc_field.get_accumulated(cell)
             }
         }
         )*)?

@@ -1,7 +1,8 @@
-use dashmap::DashMap;
-use serde::{Deserialize, Serialize};
+use std::{hash::BuildHasher, marker::PhantomData};
 
-use crate::Cell;
+use dashmap::DashMap;
+
+use crate::{Cell, Computation, Run, Storage, StorageFor};
 
 /// An accumulator is a collection which can accumulate a given cell key associated with multiple
 /// values of a given type. `Accumulator<MyItem>` is an example of such a type.
@@ -11,8 +12,10 @@ pub trait Accumulate<Item> {
     /// Push an item to the context of the given cell
     fn accumulate(&self, cell: Cell, item: Item);
 
-    /// Retrieve all items associated with the given cells
-    fn get_accumulated<Items>(&self, cells: &[Cell]) -> Items
+    /// Retrieve all items associated with the given cell.
+    /// Note that this should only include the exact cell given, not any
+    /// values accumulated from dependencies.
+    fn get_accumulated<Items>(&self, cell: Cell) -> Items
         where Items: FromIterator<Item>;
 }
 
@@ -20,7 +23,7 @@ pub struct Accumulator<Item> {
     map: DashMap<Cell, Vec<Item>>,
 }
 
-impl<T> Default for Accumulator<T> {
+impl<Item> Default for Accumulator<Item> {
     fn default() -> Self {
         Self { map: Default::default() }
     }
@@ -28,50 +31,48 @@ impl<T> Default for Accumulator<T> {
 
 impl<Item: Clone> Accumulate<Item> for Accumulator<Item> {
     fn accumulate(&self, cell: Cell, item: Item) {
-        self.map.accumulate(cell, item);
+        self.map.entry(cell).or_default().push(item);
     }
 
-    fn get_accumulated<Items>(&self, cells: &[Cell]) -> Items where
-        Items: FromIterator<Item>
-    {
-        self.map.get_accumulated(cells)
-    }
-}
-
-impl<Item: Clone> Accumulate<Item> for DashMap<Cell, Vec<Item>> {
-    fn accumulate(&self, cell: Cell, item: Item) {
-        self.entry(cell).or_default().push(item);
-    }
-
-    fn get_accumulated<Items>(&self, cells: &[Cell]) -> Items
+    fn get_accumulated<Items>(&self, cell: Cell) -> Items
         where Items: FromIterator<Item>
     {
-        let iter = cells.iter().filter_map(|cell| {
-            self.get(cell).map(|items| items.clone())
-        }).flatten();
-
-        FromIterator::from_iter(iter)
+        if let Some(items) = self.map.get(&cell) {
+            FromIterator::from_iter(items.iter().cloned())
+        } else {
+            FromIterator::from_iter(std::iter::empty())
+        }
     }
 }
 
-impl<Item: Serialize + Clone> Serialize for Accumulator<Item> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where
-        S: serde::Serializer
-    {
-        let vec: Vec<(Cell, Vec<Item>)> = self.map.iter().map(|entry| {
-            (*entry.key(), entry.value().clone())
-        }).collect();
+#[derive(serde::Serialize, serde::Deserialize, Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[serde(transparent)]
+pub struct Accumulated<Item> {
+    cell: Cell,
+    _item: std::marker::PhantomData<Item>,
+}
 
-        vec.serialize(serializer)
+impl<Item> Accumulated<Item> {
+    pub(crate) fn new(cell: Cell) -> Self {
+        Self { cell, _item: PhantomData }
     }
 }
 
-impl<'de, Item: Deserialize<'de>> Deserialize<'de> for Accumulator<Item> {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where
-        D: serde::Deserializer<'de>
-    {
-        let vec: Vec<(Cell, Vec<Item>)> = Deserialize::deserialize(deserializer)?;
-        let map = vec.into_iter().collect();
-        Ok(Accumulator { map })
+impl<Item: 'static> Computation for Accumulated<Item> {
+    type Output = Vec<Item>;
+    const IS_INPUT: bool = false;
+    const ASSUME_CHANGED: bool = false;
+
+    fn computation_id() -> u32 {
+        100000
+    }
+}
+
+impl<S, Item> Run<S> for Accumulated<Item> where
+    Item: 'static,
+    S: Storage + StorageFor<Accumulated<Item>>,
+{
+    fn run(&self, db: &crate::DbHandle<S>) -> Self::Output {
+        db.get_accumulated_with_cell(self.cell)
     }
 }

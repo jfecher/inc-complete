@@ -1,5 +1,7 @@
 use crate::{
-    accumulate::Accumulate, storage::StorageFor, Cell, Db, Computation, Storage
+    Cell, Computation, Db, Storage,
+    accumulate::{Accumulate, Accumulated},
+    storage::StorageFor,
 };
 
 use super::DbGet;
@@ -46,17 +48,14 @@ impl<S: Storage> DbHandle<'_, S> {
     {
         // Register the dependency
         let dependency = self.db.get_or_insert_cell(compute);
-        self.update_and_register_dependency(dependency);
+        self.update_and_register_dependency::<C>(dependency);
 
         // Fetch the current value of the dependency, running it if out of date
         self.db.get_with_cell(dependency)
     }
 
     /// Registers the given cell as a dependency, running it and updating any required metadata
-    fn update_and_register_dependency<C: Computation>(&self, dependency: Cell)
-    where
-        S: StorageFor<C>,
-    {
+    fn update_and_register_dependency<C: Computation>(&self, dependency: Cell) {
         let mut cell = self.db.cells.get_mut(&self.current_operation).unwrap();
 
         // If `dependency` is an input it must be remembered both as a dependency
@@ -89,8 +88,9 @@ impl<S: Storage> DbHandle<'_, S> {
     /// a call to `get_accumulated`.
     ///
     /// This is most often used for operations like pushing diagnostics or logs.
-    pub fn accumulate<Item>(&self, item: Item) where
-        S: Accumulate<Item>
+    pub fn accumulate<Item>(&self, item: Item)
+    where
+        S: Accumulate<Item>,
     {
         self.storage().accumulate(self.current_operation, item);
     }
@@ -98,27 +98,38 @@ impl<S: Storage> DbHandle<'_, S> {
     /// Retrieve an accumulated value in a container of the user's choice.
     /// This will return all the accumulated items after the given computation.
     ///
-    /// Note that although this method will not re-perform the given computation,
-    /// it will re-collect all the required accumulated items each time it is called,
-    /// which may be costly for large dependency trees.
+    /// This is most often used for operations like retrieving diagnostics or logs.
+    pub fn get_accumulated<Item, C>(&self, compute: C) -> Vec<Item>
+    where
+        C: Computation,
+        Item: 'static,
+        S: StorageFor<Accumulated<Item>> + StorageFor<C>,
+    {
+        let dependency = self.db.get_or_insert_cell(compute);
+        self.update_and_register_dependency::<C>(dependency);
+        self.get_accumulated_with_cell::<Item>(dependency)
+    }
+
+    /// Retrieve an accumulated value in a container of the user's choice.
+    /// This will return all the accumulated items after the given computation.
+    ///
+    /// This is the implementation of the publically accessible `db.get(Accumulated::<Item>(MyComputation))`.
     ///
     /// This is most often used for operations like retrieving diagnostics or logs.
-    ///
-    /// FIXME: This method is private to the crate until the bug in tracking
-    /// accumulated values is fixed (see src/db/tests/accumulated.rs). Use the
-    /// version on a full `Db` in the meantime which does not require dependency tracking.
-    #[allow(unused)]
-    pub(crate) fn get_accumulated<Container, Item, C>(&self, compute: C) -> Container where
-        Container: FromIterator<Item>,
-        S: Accumulate<Item> + StorageFor<C>,
-        C: Computation
+    pub(crate) fn get_accumulated_with_cell<Item>(&self, cell_id: Cell) -> Vec<Item>
+    where
+        Item: 'static,
+        S: StorageFor<Accumulated<Item>>,
     {
-        // Ensure the dependency is registered.
-        let cell_id = self.db.get_or_insert_cell(compute);
-        let _ = self.update_and_register_dependency(cell_id);
+        let dependencies = self.db.with_cell(cell_id, |cell| cell.dependencies.clone());
 
-        let cells = self.db.collect_all_dependencies(cell_id);
-        self.storage().get_accumulated(&cells)
+        // Collect `Accumulator` results from each dependency. This should also ensure we
+        // rerun this if any dependency changes, even if `cell_id` is updated such that it
+        // uses different dependencies but its output remains the same.
+        dependencies
+            .into_iter()
+            .flat_map(|dependency| self.get(Accumulated::<Item>::new(dependency)))
+            .collect()
     }
 }
 
