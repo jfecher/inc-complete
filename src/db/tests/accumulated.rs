@@ -57,7 +57,7 @@ define_intermediate!(2, Resolve -> i32, Compiler, |ctx, db| {
 #[derive(Debug, Clone, Hash, PartialEq, Eq, Ord, PartialOrd)]
 struct MessUpErrorCount;
 define_intermediate!(3, MessUpErrorCount -> i32, Compiler, |_, db| {
-    let file_number = File(0).get(db);
+    let file_number = Parse(0).get(db);
     if file_number % 2 == 0 {
         db.accumulate(Error(100));
     }
@@ -69,7 +69,7 @@ define_intermediate!(3, MessUpErrorCount -> i32, Compiler, |_, db| {
 #[derive(Debug, Clone, Hash, PartialEq, Eq, Ord, PartialOrd)]
 struct ErrorCount;
 define_intermediate!(4, ErrorCount -> usize, Compiler, |_, db| {
-    let errors: Vec<_> = db.get_accumulated(MessUpErrorCount);
+    let errors = db.get_accumulated::<Error, _>(MessUpErrorCount);
     errors.len()
 });
 
@@ -104,12 +104,10 @@ fn accumulators_broken_on_update_without_return_value_update() {
     db.update_input(File(0), 0);
 
     // `MessUpErrorCount` emits an error when `File(0)` is even
-    assert_eq!(ErrorCount.get(&db), 1);
-
-    // yet if we remove the condition to cause the error
+    assert_eq!(ErrorCount.get(&db), 2);
     db.update_input(File(0), 1);
 
-    // The computation is still cached because `MessUpErrorCount`'s return value
-    // did not change, and thus `ErrorCount` still sees the old error count instead of 0.
-    assert_eq!(ErrorCount.get(&db), 1, "If this is 1, this bug is fixed");
+    // `File(0)` was changed, so the error count should be updated even though
+    // `MessUpErrorCount` is short-circuited by `Parse(0)`'s result not chaning
+    assert_eq!(ErrorCount.get(&db), 2);
 }

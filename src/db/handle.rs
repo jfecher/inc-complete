@@ -103,7 +103,7 @@ impl<S: Storage> DbHandle<'_, S> {
     where
         C: Computation,
         Item: 'static,
-        S: StorageFor<Accumulated<Item>> + StorageFor<C>,
+        S: StorageFor<Accumulated<Item>> + StorageFor<C> + Accumulate<Item>,
     {
         let dependency = self.db.get_or_insert_cell(compute);
         self.update_and_register_dependency::<C>(dependency);
@@ -112,6 +112,9 @@ impl<S: Storage> DbHandle<'_, S> {
 
     /// Retrieve an accumulated value in a container of the user's choice.
     /// This will return all the accumulated items after the given computation.
+    /// The order of accumulated items will be in the order dependencies are called,
+    /// with any items in the current computation itself being last. Within a single
+    /// computation, items are in the order they are emitted.
     ///
     /// This is the implementation of the publically accessible `db.get(Accumulated::<Item>(MyComputation))`.
     ///
@@ -119,17 +122,20 @@ impl<S: Storage> DbHandle<'_, S> {
     pub(crate) fn get_accumulated_with_cell<Item>(&self, cell_id: Cell) -> Vec<Item>
     where
         Item: 'static,
-        S: StorageFor<Accumulated<Item>>,
+        S: StorageFor<Accumulated<Item>> + Accumulate<Item>,
     {
         let dependencies = self.db.with_cell(cell_id, |cell| cell.dependencies.clone());
 
         // Collect `Accumulator` results from each dependency. This should also ensure we
         // rerun this if any dependency changes, even if `cell_id` is updated such that it
         // uses different dependencies but its output remains the same.
-        dependencies
+        let mut result: Vec<Item> = dependencies
             .into_iter()
             .flat_map(|dependency| self.get(Accumulated::<Item>::new(dependency)))
-            .collect()
+            .collect();
+
+        result.extend(self.storage().get_accumulated::<Vec<Item>>(cell_id));
+        result
     }
 }
 

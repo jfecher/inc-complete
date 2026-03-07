@@ -1,4 +1,4 @@
-use std::{hash::BuildHasher, marker::PhantomData};
+use std::marker::PhantomData;
 
 use dashmap::DashMap;
 
@@ -70,7 +70,7 @@ impl<Item: 'static> Computation for Accumulated<Item> {
 
 impl<S, Item> Run<S> for Accumulated<Item> where
     Item: 'static,
-    S: Storage + StorageFor<Accumulated<Item>>,
+    S: Storage + StorageFor<Accumulated<Item>> + Accumulate<Item>,
 {
     fn run(&self, db: &crate::DbHandle<S>) -> Self::Output {
         db.get_accumulated_with_cell(self.cell)
