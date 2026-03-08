@@ -83,3 +83,25 @@ impl<S, Item> Run<S> for Accumulated<Item> where
         db.get_accumulated_with_cell(self.cell)
     }
 }
+
+impl<Item: Serialize + Clone> Serialize for Accumulator<Item> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where
+        S: serde::Serializer
+    {
+        let vec: Vec<(Cell, Vec<Item>)> = self.map.iter().map(|entry| {
+            (*entry.key(), entry.value().clone())
+        }).collect();
+
+        vec.serialize(serializer)
+    }
+}
+
+impl<'de, Item: Deserialize<'de>> Deserialize<'de> for Accumulator<Item> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where
+        D: serde::Deserializer<'de>
+    {
+        let vec: Vec<(Cell, Vec<Item>)> = Deserialize::deserialize(deserializer)?;
+        let map = vec.into_iter().collect();
+        Ok(Accumulator { map })
+    }
+}

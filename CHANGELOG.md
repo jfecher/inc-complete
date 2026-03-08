@@ -1,3 +1,7 @@
+# 0.9.1
+
+- Re-added `Serialize` and `Deserialize` impls for `Accumulator`
+
 # 0.9.0
 
 0.9.0 Reworks accumulated values. They are now more integrated with other values and can
