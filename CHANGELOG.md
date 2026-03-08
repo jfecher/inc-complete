@@ -1,3 +1,61 @@
+# 0.9.0
+
+0.9.0 Reworks accumulated values. They are now more integrated with other values and can
+be queried with a `DbHandle` as well instead of just with a `Db`. Additionally, these queries are
+now fully cached, fixing performance issues on large graphs in prior versions.
+
+## Breaking:
+
+- Using accumulated values now requires a storage field in addition to the previously required accumulator field.
+For example, if you are using the `impl_storage!` macro your storage should now look like this:
+
+```rust
+#[derive(Default)]
+struct MyStorage {
+    /// This was already required previously
+    item_accumulator: Accumulator<MyItemType>,
+
+    /// This extra field is now required to store the cached
+    /// values of accumulator queries. The storage kind is configurable
+    /// like other computation storage fields.
+    item_storage: HashMapStorage<Accumulated<Error>>,
+}
+
+impl_storage!(MyStorage,
+    // The new item storage field is treated like a computation storage type
+    item_storage: Accumulated<Error>,
+
+    @accumulators {
+        item_accumulator: Error,
+    }
+);
+```
+
+Alternatively, if you're using the `Storage` derive macro, it would look like the following:
+
+```ante
+#[derive(Default, Storage)]
+struct MyStorage {
+    #[inc_complete(accumulate)]
+    logs: Accumulator<MyItemType>,
+
+    /// The newly required field. May be named anything but the
+    /// computation type must be `Accumulated<MyItemType>` for any given `MyItemType`.
+    log_storage: HashMapStorage<Accumulated<MyItemType>>,
+}
+```
+
+- `Db::get_accumulated` will now always return a `Vec` of accumulated values in dependency-first order.
+- Manual impls of `Storage` now require a `clear_accumulated_for_cell` method
+
+## Non-breaking:
+
+- The `Accumulated` type has been added. This type will generally only be used when declaring the
+newly required accumulated storage field for each accumulated item.
+- `DbHandle::get_accumulated` has been added. Your computations may now depend on intermediate accumulated
+values and will still be updated properly when an accumulated value changed even if the return value from
+the dependent computation did not.
+
 # 0.8.3
 
 - Debug formatting when reporting cycle errors has been improved. It should be easier to read longer cycles now.

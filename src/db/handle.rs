@@ -56,15 +56,18 @@ impl<S: Storage> DbHandle<'_, S> {
 
     /// Registers the given cell as a dependency, running it and updating any required metadata
     fn update_and_register_dependency<C: Computation>(&self, dependency: Cell) {
+        self.update_and_register_dependency_inner(dependency, C::IS_INPUT);
+    }
+
+    fn update_and_register_dependency_inner(&self, dependency: Cell, is_input: bool) {
         let mut cell = self.db.cells.get_mut(&self.current_operation).unwrap();
 
         // If `dependency` is an input it must be remembered both as a dependency
         // and as an input dependency. Otherwise we cannot differentiate between
         // computations which directly depend on inputs and those that only indirectly
         // depend on them.
-        // TODO: Check if we should filter out already-inserted dependencies
         cell.dependencies.push(dependency);
-        if C::IS_INPUT {
+        if is_input {
             cell.input_dependencies.insert(dependency);
         }
 
@@ -106,7 +109,6 @@ impl<S: Storage> DbHandle<'_, S> {
         S: StorageFor<Accumulated<Item>> + StorageFor<C> + Accumulate<Item>,
     {
         let dependency = self.db.get_or_insert_cell(compute);
-        self.update_and_register_dependency::<C>(dependency);
         self.get_accumulated_with_cell::<Item>(dependency)
     }
 
@@ -124,13 +126,18 @@ impl<S: Storage> DbHandle<'_, S> {
         Item: 'static,
         S: StorageFor<Accumulated<Item>> + Accumulate<Item>,
     {
+        self.update_and_register_dependency_inner(cell_id, false);
         let dependencies = self.db.with_cell(cell_id, |cell| cell.dependencies.clone());
 
         // Collect `Accumulator` results from each dependency. This should also ensure we
         // rerun this if any dependency changes, even if `cell_id` is updated such that it
         // uses different dependencies but its output remains the same.
+        let computation_id = Accumulated::<Item>::computation_id();
         let mut result: Vec<Item> = dependencies
             .into_iter()
+            // Filter out `Accumulated<Item>` cells from the dep list — they exist for staleness
+            // tracking only and must not be traversed for value collection, or we'd get duplicates.
+            .filter(|&dep| self.db.with_cell(dep, |cell| cell.computation_id) != computation_id)
             .flat_map(|dependency| self.get(Accumulated::<Item>::new(dependency)))
             .collect();
 

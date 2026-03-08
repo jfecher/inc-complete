@@ -257,7 +257,7 @@ impl<S: Storage> Db<S> {
     /// `self.version`
     fn run_compute_function(&self, cell_id: Cell) {
         let computation_id = self.with_cell(cell_id, |data| data.computation_id);
-
+        self.storage.clear_accumulated_for_cell(cell_id);
         let handle = self.handle(cell_id);
         let changed = S::run_computation(&handle, cell_id, computation_id);
 

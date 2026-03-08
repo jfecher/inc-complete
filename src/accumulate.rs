@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 
 use dashmap::DashMap;
+use serde::{Deserialize, Serialize};
 
 use crate::{Cell, Computation, Run, Storage, StorageFor};
 
@@ -29,6 +30,12 @@ impl<Item> Default for Accumulator<Item> {
     }
 }
 
+impl<Item> Accumulator<Item> {
+    pub fn clear(&self, cell: Cell) {
+        self.map.remove(&cell);
+    }
+}
+
 impl<Item: Clone> Accumulate<Item> for Accumulator<Item> {
     fn accumulate(&self, cell: Cell, item: Item) {
         self.map.entry(cell).or_default().push(item);
@@ -45,7 +52,7 @@ impl<Item: Clone> Accumulate<Item> for Accumulator<Item> {
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Serialize, Deserialize, Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[serde(transparent)]
 pub struct Accumulated<Item> {
     cell: Cell,

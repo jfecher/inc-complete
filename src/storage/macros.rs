@@ -223,6 +223,12 @@ macro_rules! impl_storage {
 
                 panic!("inc-complete internal error: input_debug_string: {cell:?} not found")
             }
+
+            fn clear_accumulated_for_cell(&self, _cell: $crate::Cell) {
+                $( $(
+                    self.$acc_field.clear(_cell);
+                )* )?
+            }
         }
 
         $(

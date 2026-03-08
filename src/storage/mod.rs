@@ -37,6 +37,9 @@ pub trait Storage: Sized {
     ///
     /// Used by inc-complete to label components of a cycle when a cycle is detected.
     fn input_debug_string(&self, db: &Db<Self>, cell: Cell) -> String;
+
+    /// Clear all accumulated values for the given cell across all accumulators.
+    fn clear_accumulated_for_cell(&self, cell: Cell);
 }
 
 /// This trait is implemented by a type storing a single computation type `C`.

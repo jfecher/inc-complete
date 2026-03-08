@@ -58,7 +58,7 @@ define_intermediate!(2, Resolve -> i32, Compiler, |ctx, db| {
 struct MessUpErrorCount;
 define_intermediate!(3, MessUpErrorCount -> i32, Compiler, |_, db| {
     let file_number = Parse(0).get(db);
-    if file_number % 2 == 0 {
+    if file_number % 2 != 0 {
         db.accumulate(Error(100));
     }
     0
@@ -70,6 +70,7 @@ define_intermediate!(3, MessUpErrorCount -> i32, Compiler, |_, db| {
 struct ErrorCount;
 define_intermediate!(4, ErrorCount -> usize, Compiler, |_, db| {
     let errors = db.get_accumulated::<Error, _>(MessUpErrorCount);
+    println!("error_count errors: {errors:?}");
     errors.len()
 });
 
@@ -104,10 +105,29 @@ fn accumulators_broken_on_update_without_return_value_update() {
     db.update_input(File(0), 0);
 
     // `MessUpErrorCount` emits an error when `File(0)` is even
-    assert_eq!(ErrorCount.get(&db), 2);
+    assert_eq!(ErrorCount.get(&db), 1);
     db.update_input(File(0), 1);
 
     // `File(0)` was changed, so the error count should be updated even though
     // `MessUpErrorCount` is short-circuited by `Parse(0)`'s result not chaning
     assert_eq!(ErrorCount.get(&db), 2);
+}
+
+#[test]
+fn accumulators_rerun_on_input_change() {
+    let mut db = Db::<Compiler>::new();
+    db.update_input(File(0), 0);
+
+    // `MessUpErrorCount` emits an error when `File(0)` is even
+    let errors = db.get_accumulated::<Error, _>(ErrorCount);
+    println!("Got errors {errors:?}");
+    assert_eq!(errors.len(), 1);
+
+    db.update_input(File(0), 1);
+
+    // `File(0)` was changed, so the error count should be updated even though
+    // `MessUpErrorCount` is short-circuited by `Parse(0)`'s result not chaning
+    let errors = db.get_accumulated::<Error, _>(ErrorCount);
+    println!("Got errors {errors:?}");
+    assert_eq!(errors.len(), 2);
 }
