@@ -1,5 +1,5 @@
-use crate::accumulate::{ Accumulated, Accumulator };
-use crate::{define_input, define_intermediate, impl_storage, Db};
+use crate::accumulate::{Accumulated, Accumulator};
+use crate::{Db, define_input, define_intermediate, impl_storage};
 
 use crate::storage::HashMapStorage;
 
@@ -82,18 +82,16 @@ fn basic_accumulators() {
     db.update_input(File(6), 6);
     db.update_input(File(7), 7);
 
-    // Accumulated value order follows dependency order, although all accumulated values of a
-    // particular dependency are pushed at the end of that dependency. That is why we see
-    // [4, 5, 4, 5] rather than [5, 5, 4, 4] here.
-    let errors: Vec<_> = db.get_accumulated(Resolve(4));
-    assert_eq!(errors, vec![Error(5), Error(4), Error(5), Error(4)]);
+    // accumulated items are deduplicated so each 4 & 5 only appear once
+    let errors: Vec<_> = db.get_accumulated(Resolve(4)).into_iter().collect();
+    assert_eq!(errors, vec![Error(4), Error(5)]);
 
     // Get different errors
-    let errors: Vec<_> = db.get_accumulated(Resolve(5));
-    assert_eq!(errors, vec![Error(6), Error(5), Error(6), Error(5)]);
+    let errors: Vec<_> = db.get_accumulated(Resolve(5)).into_iter().collect();
+    assert_eq!(errors, vec![Error(5), Error(6)]);
 
     // Get a subset of errors
-    let errors: Vec<_> = db.get_accumulated(Parse(5));
+    let errors: Vec<_> = db.get_accumulated(Parse(5)).into_iter().collect();
     assert_eq!(errors, vec![Error(5)]);
 }
 

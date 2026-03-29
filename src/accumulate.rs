@@ -1,4 +1,4 @@
-use std::marker::PhantomData;
+use std::{collections::BTreeSet, marker::PhantomData};
 
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
@@ -17,7 +17,8 @@ pub trait Accumulate<Item> {
     /// Note that this should only include the exact cell given, not any
     /// values accumulated from dependencies.
     fn get_accumulated<Items>(&self, cell: Cell) -> Items
-        where Items: FromIterator<Item>;
+    where
+        Items: FromIterator<Item>;
 }
 
 pub struct Accumulator<Item> {
@@ -26,7 +27,9 @@ pub struct Accumulator<Item> {
 
 impl<Item> Default for Accumulator<Item> {
     fn default() -> Self {
-        Self { map: Default::default() }
+        Self {
+            map: Default::default(),
+        }
     }
 }
 
@@ -42,7 +45,8 @@ impl<Item: Clone> Accumulate<Item> for Accumulator<Item> {
     }
 
     fn get_accumulated<Items>(&self, cell: Cell) -> Items
-        where Items: FromIterator<Item>
+    where
+        Items: FromIterator<Item>,
     {
         if let Some(items) = self.map.get(&cell) {
             FromIterator::from_iter(items.iter().cloned())
@@ -61,22 +65,29 @@ pub struct Accumulated<Item> {
 
 impl<Item> Accumulated<Item> {
     pub(crate) fn new(cell: Cell) -> Self {
-        Self { cell, _item: PhantomData }
+        Self {
+            cell,
+            _item: PhantomData,
+        }
     }
 }
 
 impl<Item: 'static> Computation for Accumulated<Item> {
-    type Output = Vec<Item>;
+    type Output = BTreeSet<Item>;
     const IS_INPUT: bool = false;
     const ASSUME_CHANGED: bool = false;
 
     fn computation_id() -> u32 {
-        100000
+        // TODO: Find another way to keep this as a unique ID or at least assert it is different
+        // than every other id.
+        // Arbitrary semi-random value meant to not be easily accidentally used for ids in user code
+        0x54325243
     }
 }
 
-impl<S, Item> Run<S> for Accumulated<Item> where
-    Item: 'static,
+impl<S, Item> Run<S> for Accumulated<Item>
+where
+    Item: 'static + Ord,
     S: Storage + StorageFor<Accumulated<Item>> + Accumulate<Item>,
 {
     fn run(&self, db: &crate::DbHandle<S>) -> Self::Output {
@@ -85,20 +96,24 @@ impl<S, Item> Run<S> for Accumulated<Item> where
 }
 
 impl<Item: Serialize + Clone> Serialize for Accumulator<Item> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where
-        S: serde::Serializer
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
     {
-        let vec: Vec<(Cell, Vec<Item>)> = self.map.iter().map(|entry| {
-            (*entry.key(), entry.value().clone())
-        }).collect();
+        let vec: Vec<(Cell, Vec<Item>)> = self
+            .map
+            .iter()
+            .map(|entry| (*entry.key(), entry.value().clone()))
+            .collect();
 
         vec.serialize(serializer)
     }
 }
 
 impl<'de, Item: Deserialize<'de>> Deserialize<'de> for Accumulator<Item> {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where
-        D: serde::Deserializer<'de>
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
     {
         let vec: Vec<(Cell, Vec<Item>)> = Deserialize::deserialize(deserializer)?;
         let map = vec.into_iter().collect();

@@ -1,7 +1,4 @@
-use std::{
-    sync::atomic::AtomicU32,
-    time::Duration,
-};
+use std::{sync::atomic::AtomicU32, time::Duration};
 
 use inc_complete::{Db, DbHandle, Storage, define_intermediate, storage::SingletonStorage};
 

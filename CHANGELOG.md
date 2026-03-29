@@ -1,3 +1,10 @@
+# 0.10.0
+
+## Breaking:
+
+- `get_accumulated` was changed to return `BTreeSet`s instead of `Vec` to improve performance for computations
+  with many shared dependencies.
+
 # 0.9.1
 
 - Re-added `Serialize` and `Deserialize` impls for `Accumulator`

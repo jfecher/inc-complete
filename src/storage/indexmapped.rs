@@ -36,8 +36,7 @@ where
     }
 
     fn try_get_input(&self, cell: Cell) -> Option<K> {
-        self.cell_to_key
-            .peek_with(&cell, |_, (k, _)| k.clone())
+        self.cell_to_key.peek_with(&cell, |_, (k, _)| k.clone())
     }
 
     fn get_output(&self, cell: Cell) -> Option<K::Output> {

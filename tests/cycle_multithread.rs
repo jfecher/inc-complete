@@ -1,7 +1,12 @@
-use std::{panic::AssertUnwindSafe, sync::atomic::{AtomicU32, Ordering}, time::Duration};
+use std::{
+    panic::AssertUnwindSafe,
+    sync::atomic::{AtomicU32, Ordering},
+    time::Duration,
+};
 
-use inc_complete::{define_intermediate, intermediate, storage::HashMapStorage, Db, DbHandle, Storage};
-
+use inc_complete::{
+    Db, DbHandle, Storage, define_intermediate, intermediate, storage::HashMapStorage,
+};
 
 #[derive(Default, Storage)]
 struct MyStorage {
@@ -36,13 +41,16 @@ fn foo(ctx: &Foo, db: &DbHandle<MyStorage>) -> u32 {
                 // to return true for both.
                 assert!(message.contains("Foo(false)"));
                 assert!(message.contains("Foo(true)"));
-                println!("Caught cycle panic on thread {:?}", std::thread::current().id());
+                println!(
+                    "Caught cycle panic on thread {:?}",
+                    std::thread::current().id()
+                );
                 ASSERTS_PASSED.fetch_add(1, Ordering::Relaxed);
             } else {
                 println!("No cycle panic on thread {:?}", std::thread::current().id());
             }
             panic!()
-        },
+        }
     }
 }
 

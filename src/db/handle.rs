@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use crate::{
     Cell, Computation, Db, Storage,
     accumulate::{Accumulate, Accumulated},
@@ -102,10 +104,10 @@ impl<S: Storage> DbHandle<'_, S> {
     /// This will return all the accumulated items after the given computation.
     ///
     /// This is most often used for operations like retrieving diagnostics or logs.
-    pub fn get_accumulated<Item, C>(&self, compute: C) -> Vec<Item>
+    pub fn get_accumulated<Item, C>(&self, compute: C) -> BTreeSet<Item>
     where
         C: Computation,
-        Item: 'static,
+        Item: 'static + Ord,
         S: StorageFor<Accumulated<Item>> + StorageFor<C> + Accumulate<Item>,
     {
         let dependency = self.db.get_or_insert_cell(compute);
@@ -121,9 +123,9 @@ impl<S: Storage> DbHandle<'_, S> {
     /// This is the implementation of the publically accessible `db.get(Accumulated::<Item>(MyComputation))`.
     ///
     /// This is most often used for operations like retrieving diagnostics or logs.
-    pub(crate) fn get_accumulated_with_cell<Item>(&self, cell_id: Cell) -> Vec<Item>
+    pub(crate) fn get_accumulated_with_cell<Item>(&self, cell_id: Cell) -> BTreeSet<Item>
     where
-        Item: 'static,
+        Item: 'static + Ord,
         S: StorageFor<Accumulated<Item>> + Accumulate<Item>,
     {
         self.update_and_register_dependency_inner(cell_id, false);
@@ -133,7 +135,7 @@ impl<S: Storage> DbHandle<'_, S> {
         // rerun this if any dependency changes, even if `cell_id` is updated such that it
         // uses different dependencies but its output remains the same.
         let computation_id = Accumulated::<Item>::computation_id();
-        let mut result: Vec<Item> = dependencies
+        let mut result: BTreeSet<Item> = dependencies
             .into_iter()
             // Filter out `Accumulated<Item>` cells from the dep list — they exist for staleness
             // tracking only and must not be traversed for value collection, or we'd get duplicates.

@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 
@@ -6,10 +7,10 @@ use crate::cell::CellData;
 use crate::storage::StorageFor;
 use crate::{Cell, Computation, Storage};
 
+pub mod debug_with_db;
 mod handle;
 mod serialize;
 mod tests;
-pub mod debug_with_db;
 
 pub use handle::DbHandle;
 use parking_lot::Mutex;
@@ -349,7 +350,11 @@ impl<S: Storage> Db<S> {
     fn cycle_error(&self, cycle: &[Cell]) {
         let mut error = String::new();
         for (i, cell) in cycle.iter().enumerate() {
-            error += &format!("\n  {}. {}", i + 1, self.storage.input_debug_string(self, *cell));
+            error += &format!(
+                "\n  {}. {}",
+                i + 1,
+                self.storage.input_debug_string(self, *cell)
+            );
         }
         panic!("inc-complete: Cycle Detected!\n\nCycle:{error}")
     }
@@ -388,7 +393,7 @@ impl<S: Storage> Db<S> {
     /// Subsequent calls to this for the same computation or dependencies will be cached.
     ///
     /// This is most often used for operations like retrieving diagnostics or logs.
-    pub fn get_accumulated<Item, C>(&self, compute: C) -> Vec<Item>
+    pub fn get_accumulated<Item, C>(&self, compute: C) -> BTreeSet<Item>
     where
         S: StorageFor<C> + StorageFor<Accumulated<Item>>,
         C: Computation,

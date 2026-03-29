@@ -60,7 +60,8 @@ pub trait StorageFor<C: Computation> {
     /// Retrieve the input for this computation.
     /// The input is expected to already be inserted into this storage.
     fn get_input(&self, cell: Cell) -> C {
-        self.try_get_input(cell).expect("inc-complete internal error: get_input: expected input to be set")
+        self.try_get_input(cell)
+            .expect("inc-complete internal error: get_input: expected input to be set")
     }
 
     /// Retrieve the output for the given cell, if it exists

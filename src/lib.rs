@@ -24,10 +24,10 @@
 //! This struct often holds the arguments for the corresponding function to perform but in
 //! this case none of our cells need any parameters besides the values of other cells to query.
 //!
-//! For each input type we'll derive `Input` and give it a unique id, along with 
+//! For each input type we'll derive `Input` and give it a unique id, along with
 //! the output type of the function retrieving the input value, and the storage type we'll store
 //! all the metadata in - we'll define this type later on.
-//! 
+//!
 //! Let's start by defining our input types:
 //!
 //! ```
@@ -48,7 +48,7 @@
 //! ```
 //!
 //! Next, let's define the intermediate computations and the functions to compute them.
-//! For these we just need to define the computation type and use the `intermediate` macro 
+//! For these we just need to define the computation type and use the `intermediate` macro
 //! on a function to perform that computation. Note that this function should have
 //! exactly two arguments: the computation type itself (which may be a struct containing
 //! more arguments to use if needed), and a `DbHandle` containing your storage type:
@@ -99,7 +99,7 @@
 //! any sub-computations we need and the `DbHandle` object automatically gives us the most
 //! up to date version of those computations - we'll examine this claim a bit closer later.
 //!
-//! Now we can define the actual storage type to hold all our computations. 
+//! Now we can define the actual storage type to hold all our computations.
 //!
 //! ```
 //! # #[derive(Debug, Clone)]
@@ -273,7 +273,10 @@ mod db;
 mod interned;
 
 pub use cell::Cell;
-pub use db::{Db, DbGet, DbHandle, debug_with_db::{ DebugWithDb, debug_with_db }};
+pub use db::{
+    Db, DbGet, DbHandle,
+    debug_with_db::{DebugWithDb, debug_with_db},
+};
 pub use storage::{Computation, Run, Storage, StorageFor};
 
 pub use inc_complete_derive::{Input, Storage, intermediate};

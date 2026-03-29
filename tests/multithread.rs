@@ -1,4 +1,4 @@
-use inc_complete::{define_intermediate, storage::HashMapStorage, Db, DbHandle, Storage};
+use inc_complete::{Db, DbHandle, Storage, define_intermediate, storage::HashMapStorage};
 
 #[derive(Default, Storage)]
 struct Context {

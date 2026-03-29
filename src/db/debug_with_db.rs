@@ -12,7 +12,10 @@ pub trait DebugWithDb<Storage>: Sized {
     fn fmt_with_db(&self, _db: &Db<Storage>, f: &mut std::fmt::Formatter) -> std::fmt::Result;
 }
 
-pub fn debug_with_db<'a, T, Storage>(obj: &'a T, db: &'a Db<Storage>) -> DebugWithDbWrapper<'a, T, Storage> {
+pub fn debug_with_db<'a, T, Storage>(
+    obj: &'a T,
+    db: &'a Db<Storage>,
+) -> DebugWithDbWrapper<'a, T, Storage> {
     DebugWithDbWrapper { obj, db }
 }
 
@@ -23,8 +26,8 @@ pub struct DebugWithDbWrapper<'a, T, S> {
 }
 
 impl<T, S> std::fmt::Debug for DebugWithDbWrapper<'_, T, S>
-    where
-        T: DebugWithDb<S>
+where
+    T: DebugWithDb<S>,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.obj.fmt_with_db(self.db, f)

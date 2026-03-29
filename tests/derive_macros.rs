@@ -1,5 +1,8 @@
 use inc_complete::{
-    Db, Input, Storage, accumulate::{ Accumulated, Accumulator }, define_input, define_intermediate, intermediate, storage::{HashMapStorage, SingletonStorage}
+    Db, Input, Storage,
+    accumulate::{Accumulated, Accumulator},
+    define_input, define_intermediate, intermediate,
+    storage::{HashMapStorage, SingletonStorage},
 };
 
 // Simple calculator storage
