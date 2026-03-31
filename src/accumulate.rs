@@ -72,16 +72,17 @@ impl<Item> Accumulated<Item> {
     }
 }
 
+// Arbitrary semi-random value meant to not be easily accidentally used for ids in user code.
+// Must be unique across all computation IDs.
+pub(crate) const ACCUMULATED_COMPUTATION_ID: u32 = 0x54325243;
+
 impl<Item: 'static> Computation for Accumulated<Item> {
     type Output = BTreeSet<Item>;
     const IS_INPUT: bool = false;
     const ASSUME_CHANGED: bool = false;
 
     fn computation_id() -> u32 {
-        // TODO: Find another way to keep this as a unique ID or at least assert it is different
-        // than every other id.
-        // Arbitrary semi-random value meant to not be easily accidentally used for ids in user code
-        0x54325243
+        ACCUMULATED_COMPUTATION_ID
     }
 }
 

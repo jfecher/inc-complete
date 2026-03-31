@@ -11,6 +11,7 @@ struct Compiler {
     mess_up_error_counts: HashMapStorage<MessUpErrorCount>,
     error_count: HashMapStorage<ErrorCount>,
     error_storage: HashMapStorage<Accumulated<Error>>,
+    direct_accumulator: HashMapStorage<DirectAccumulator>,
 
     errors: Accumulator<Error>,
 }
@@ -22,6 +23,7 @@ impl_storage!(Compiler,
     mess_up_error_counts: MessUpErrorCount,
     error_count: ErrorCount,
     error_storage: Accumulated<Error>,
+    direct_accumulator: DirectAccumulator,
 
     @accumulators {
         errors: Error,
@@ -60,6 +62,20 @@ define_intermediate!(3, MessUpErrorCount -> i32, Compiler, |_, db| {
     let file_number = Parse(0).get(db);
     if file_number % 2 != 0 {
         db.accumulate(Error(100));
+    }
+    0
+});
+
+/// Always returns 0, but accumulates Error(200) when File(0) is odd.
+/// Unlike MessUpErrorCount, this reads File(0) directly (no intermediate Parse),
+/// so the only dependency of Accumulated<Error>(direct_cell) that could indicate
+/// staleness is the input cell itself — which never changes its accumulated values.
+#[derive(Debug, Clone, Hash, PartialEq, Eq, Ord, PartialOrd)]
+struct DirectAccumulator;
+define_intermediate!(5, DirectAccumulator -> i32, Compiler, |_, db| {
+    let file_number = File(0).get(db);
+    if file_number % 2 != 0 {
+        db.accumulate(Error(200));
     }
     0
 });
@@ -128,4 +144,27 @@ fn accumulators_rerun_on_input_change() {
     let errors = db.get_accumulated::<Error, _>(ErrorCount);
     println!("Got errors {errors:?}");
     assert_eq!(errors.len(), 2);
+}
+
+/// Regression test: accumulated values must be refreshed when the underlying cell re-ran
+/// (clearing and re-accumulating), even if its return value did not change.
+/// Unlike the MessUpErrorCount tests, DirectAccumulator reads File(0) directly with no
+/// changing intermediate, so Accumulated<Error>(direct_cell)'s only tracked dependency
+/// that could signal staleness via last_updated_version is the input cell itself — which
+/// has no accumulated values and thus never changes Accumulated<Error>(input_cell)'s output.
+#[test]
+fn accumulated_values_update_when_direct_input_changes_but_return_value_is_stable() {
+    let mut db = Db::<Compiler>::new();
+    db.update_input(File(0), 1); // odd → DirectAccumulator accumulates Error(200)
+
+    let errors = db.get_accumulated::<Error, _>(DirectAccumulator);
+    assert!(errors.contains(&Error(200)));
+
+    db.update_input(File(0), 2); // even → DirectAccumulator should NOT accumulate Error(200)
+
+    let errors = db.get_accumulated::<Error, _>(DirectAccumulator);
+    assert!(
+        !errors.contains(&Error(200)),
+        "Error(200) should not be present after input changed to even value; got: {errors:?}"
+    );
 }

@@ -241,6 +241,15 @@ impl<S: Storage> Db<S> {
             self.with_cell(input_id, |input| input.last_updated_version > last_verified)
         });
 
+        // Accumulated<X> cells must re-run whenever any transitive input changed, not only
+        // when a dependency's return value changed. The underlying cell may have re-run
+        // (clearing and re-accumulating side effects) while returning the same output, in
+        // which case `last_updated_version` is not incremented but the accumulated values
+        // are fresh and need to be re-collected.
+        if computation_id == crate::accumulate::ACCUMULATED_COMPUTATION_ID {
+            return inputs_changed;
+        }
+
         // Dependencies need to be iterated in the order they were computed.
         // Otherwise we may re-run a computation which does not need to be re-run.
         // In the worst case this could even lead to panics - see the div0 test.

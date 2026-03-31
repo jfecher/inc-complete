@@ -1,3 +1,7 @@
+# 0.10.1
+
+- Fixed accumulators not updating in some specific cases when an input changed but no intermediate computation changed.
+
 # 0.10.0
 
 ## Breaking:
