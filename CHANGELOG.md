@@ -1,3 +1,7 @@
+# 0.10.3
+
+- Optimizations to most queries
+
 # 0.10.2
 
 - Added `Db::get_accumulated_uncached` as a faster version of `Db::get_accumulated` for single large queries

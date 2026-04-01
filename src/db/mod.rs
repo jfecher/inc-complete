@@ -106,10 +106,17 @@ impl<S: Storage> Db<S> {
         C: Computation,
         S: StorageFor<C>,
     {
+        if let Some(cell) = self.get_cell(&input) {
+            return cell;
+        }
+
+        // Cell doesn't exist yet, we need to lock & create a unique Cell for this input
         let computation_id = C::computation_id();
         let lock = self.cell_locks.entry(computation_id).or_default().clone();
         let _guard = lock.lock();
 
+        // Need to check get_cell again in case another thread created this Cell after
+        // our get_cell call but before we acquired the lock
         if let Some(cell) = self.get_cell(&input) {
             cell
         } else {
@@ -218,20 +225,18 @@ impl<S: Storage> Db<S> {
     ///
     /// Note that this may re-compute some input
     fn is_stale_cell(&self, cell: Cell) -> bool {
-        let computation_id = self.with_cell(cell, |data| data.computation_id);
-
-        if self.storage.output_is_unset(cell, computation_id) {
-            return true;
-        }
-
-        // if any input dependency has changed, this cell is stale
-        let (last_verified, inputs, dependencies) = self.with_cell(cell, |data| {
+        let (computation_id, last_verified, inputs, dependencies) = self.with_cell(cell, |data| {
             (
+                data.computation_id,
                 data.last_verified_version,
                 data.input_dependencies.clone(),
                 data.dependencies.clone(),
             )
         });
+
+        if self.storage.output_is_unset(cell, computation_id) {
+            return true;
+        }
 
         // Optimization: only recursively check all dependencies if any
         // of the inputs this cell depends on have changed

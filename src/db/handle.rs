@@ -82,9 +82,13 @@ impl<S: Storage> DbHandle<'_, S> {
         let dependency_inputs = dependency.input_dependencies.clone();
         drop(dependency);
 
-        let mut cell = self.db.cells.get_mut(&self.current_operation).unwrap();
-        for input in dependency_inputs {
-            cell.input_dependencies.insert(input);
+        // Is this check necessary? It is meant as an optimization to avoid unnecessarily acquiring
+        // `cell` but in practice the vast majority of computations will have at least 1 input dependency.
+        if !dependency_inputs.is_empty() {
+            let mut cell = self.db.cells.get_mut(&self.current_operation).unwrap();
+            for input in dependency_inputs {
+                cell.input_dependencies.insert(input);
+            }
         }
     }
 
