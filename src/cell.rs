@@ -15,6 +15,7 @@ impl Cell {
 pub(crate) struct CellData {
     pub(crate) computation_id: u32,
     pub(crate) last_updated_version: u32,
+    pub(crate) last_run_version: u32,
     pub(crate) last_verified_version: u32,
     pub(crate) dependencies: Vec<Cell>,
     pub(crate) input_dependencies: HashSet<Cell, rustc_hash::FxBuildHasher>,
@@ -26,6 +27,7 @@ impl CellData {
         Self {
             computation_id,
             last_updated_version: 0,
+            last_run_version: 0,
             last_verified_version: 0,
             dependencies: Vec::new(),
             input_dependencies: Default::default(),

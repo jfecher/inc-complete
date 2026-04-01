@@ -29,6 +29,7 @@ where
                 CellDataDeserialize {
                     computation_id: value.computation_id,
                     last_updated_version: value.last_updated_version,
+                    last_run_version: value.last_run_version,
                     last_verified_version: value.last_verified_version,
                     dependencies: value.dependencies.clone(),
                     input_dependencies,
@@ -62,6 +63,8 @@ struct DbDeserialize<Storage> {
 struct CellDataDeserialize {
     computation_id: u32,
     last_updated_version: u32,
+    #[serde(default)]
+    last_run_version: u32,
     last_verified_version: u32,
     dependencies: Vec<Cell>,
     input_dependencies: Vec<Cell>,
@@ -85,6 +88,7 @@ where
                 crate::cell::CellData {
                     computation_id: data.computation_id,
                     last_updated_version: data.last_updated_version,
+                    last_run_version: data.last_run_version,
                     last_verified_version: data.last_verified_version,
                     dependencies: data.dependencies,
                     input_dependencies: data.input_dependencies.into_iter().collect(),

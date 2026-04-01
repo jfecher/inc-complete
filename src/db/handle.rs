@@ -116,9 +116,6 @@ impl<S: Storage> DbHandle<'_, S> {
 
     /// Retrieve an accumulated value in a container of the user's choice.
     /// This will return all the accumulated items after the given computation.
-    /// The order of accumulated items will be in the order dependencies are called,
-    /// with any items in the current computation itself being last. Within a single
-    /// computation, items are in the order they are emitted.
     ///
     /// This is the implementation of the publically accessible `db.get(Accumulated::<Item>(MyComputation))`.
     ///

@@ -1,3 +1,7 @@
+# 0.10.2
+
+- Added `Db::get_accumulated_uncached` as a faster version of `Db::get_accumulated` for single large queries
+
 # 0.10.1
 
 - Fixed accumulators not updating in some specific cases when an input changed but no intermediate computation changed.

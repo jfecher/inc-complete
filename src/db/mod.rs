@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use crate::accumulate::Accumulated;
+use crate::accumulate::{ACCUMULATED_COMPUTATION_ID, Accumulate, Accumulated};
 use crate::cell::CellData;
 use crate::storage::StorageFor;
 use crate::{Cell, Computation, Storage};
@@ -241,15 +241,6 @@ impl<S: Storage> Db<S> {
             self.with_cell(input_id, |input| input.last_updated_version > last_verified)
         });
 
-        // Accumulated<X> cells must re-run whenever any transitive input changed, not only
-        // when a dependency's return value changed. The underlying cell may have re-run
-        // (clearing and re-accumulating side effects) while returning the same output, in
-        // which case `last_updated_version` is not incremented but the accumulated values
-        // are fresh and need to be re-collected.
-        if computation_id == crate::accumulate::ACCUMULATED_COMPUTATION_ID {
-            return inputs_changed;
-        }
-
         // Dependencies need to be iterated in the order they were computed.
         // Otherwise we may re-run a computation which does not need to be re-run.
         // In the worst case this could even lead to panics - see the div0 test.
@@ -257,7 +248,11 @@ impl<S: Storage> Db<S> {
             && dependencies.into_iter().any(|dependency_id| {
                 self.update_cell(dependency_id);
                 self.with_cell(dependency_id, |dependency| {
-                    dependency.last_updated_version > last_verified
+                    if computation_id == ACCUMULATED_COMPUTATION_ID {
+                        dependency.last_run_version > last_verified
+                    } else {
+                        dependency.last_updated_version > last_verified
+                    }
                 })
             })
     }
@@ -274,6 +269,7 @@ impl<S: Storage> Db<S> {
         let version = self.version.load(Ordering::SeqCst);
         let mut cell = self.cells.get_mut(&cell_id).unwrap();
         cell.last_verified_version = version;
+        cell.last_run_version = version;
 
         if changed {
             cell.last_updated_version = version;
@@ -399,9 +395,16 @@ impl<S: Storage> Db<S> {
     }
 
     /// Retrieve each accumulated value of the given type after the given computation is run.
-    /// Subsequent calls to this for the same computation or dependencies will be cached.
     ///
     /// This is most often used for operations like retrieving diagnostics or logs.
+    ///
+    /// Compared to [Db::get_accumulated_uncached], this version reuses the normal flow for
+    /// queries and thus saves accumulated values for each intermediate query. This involves
+    /// more synching and data duplication but can be beneficial if intermediate results
+    /// ever need to be reused, e.g. if you call [Db::get_accumulated] in a loop where each
+    /// call may share dependencies. If you already have a single query which emits all the
+    /// accumulated values you need, [Db::get_accumulated_uncached] is likely faster, but
+    /// requires a `&mut Db`.
     pub fn get_accumulated<Item, C>(&self, compute: C) -> BTreeSet<Item>
     where
         S: StorageFor<C> + StorageFor<Accumulated<Item>>,
@@ -411,5 +414,36 @@ impl<S: Storage> Db<S> {
         let cell_id = self.get_or_insert_cell(compute);
         self.update_cell(cell_id);
         self.get(Accumulated::<Item>::new(cell_id))
+    }
+
+    /// Retrieve each accumulated value of the given type after the given computation is run.
+    ///
+    /// This is most often used for operations like retrieving diagnostics or logs.
+    ///
+    /// This is a faster version of [Db::get_accumulated] for some use-cases. This version tends to be
+    /// more efficient when you already have a single query which emits all the accumulated values
+    /// you need, while the original [Db::get_accumulated] is more efficient when you have many
+    /// smaller calls since it avoids duplicated work and is safe to call with only a [DbHandle].
+    pub fn get_accumulated_uncached<Item, C>(&mut self, compute: C) -> BTreeSet<Item>
+    where
+        S: StorageFor<C> + StorageFor<Accumulated<Item>> + Accumulate<Item>,
+        C: Computation,
+        Item: 'static + Ord,
+    {
+        let cell_id = self.get_or_insert_cell(compute);
+        self.update_cell(cell_id);
+
+        let mut items = BTreeSet::new();
+        let mut visited = BTreeSet::new();
+        let mut queue = vec![cell_id];
+
+        while let Some(cell) = queue.pop() {
+            if visited.insert(cell) {
+                self.with_cell(cell, |data| queue.extend_from_slice(&data.dependencies));
+                items.extend(self.storage().get_accumulated::<Vec<Item>>(cell));
+            }
+        }
+
+        items
     }
 }
