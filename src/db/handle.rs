@@ -64,25 +64,29 @@ impl<S: Storage> DbHandle<'_, S> {
     fn update_and_register_dependency_inner(&self, dependency: Cell, is_input: bool) {
         let mut cell = self.db.cells.get_mut(&self.current_operation).unwrap();
 
-        // If `dependency` is an input it must be remembered both as a dependency
-        // and as an input dependency. Otherwise we cannot differentiate between
-        // computations which directly depend on inputs and those that only indirectly
-        // depend on them.
-        cell.dependencies.push(dependency);
-        if is_input {
-            cell.input_dependencies.insert(dependency);
+        // TODO: Investigate whether this is faster than a separate hashset or insertion-ordered
+        // set in practice.
+        let newly_registered = !cell.dependencies.contains(&dependency);
+        if newly_registered {
+            cell.dependencies.push(dependency);
+            if is_input {
+                cell.input_dependencies.insert(dependency);
+            }
         }
-
         drop(cell);
 
         // Run the computation to update its dependencies before we query them afterward
         self.db.update_cell(dependency);
 
+        if !newly_registered {
+            return;
+        }
+
         let dependency = self.db.cells.get(&dependency).unwrap();
         let dependency_inputs = dependency.input_dependencies.clone();
         drop(dependency);
 
-        // Is this check necessary? It is meant as an optimization to avoid unnecessarily acquiring
+        // TODO: Is this check necessary? It is meant as an optimization to avoid unnecessarily acquiring
         // `cell` but in practice the vast majority of computations will have at least 1 input dependency.
         if !dependency_inputs.is_empty() {
             let mut cell = self.db.cells.get_mut(&self.current_operation).unwrap();

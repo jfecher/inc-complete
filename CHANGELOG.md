@@ -1,3 +1,8 @@
+# 0.10.4
+
+- Fixed a bug where unit values stored in `SingletonStorage` would always be decoded as if no value where in the storage
+- Minor hashing optimizations
+
 # 0.10.3
 
 - Optimizations to most queries

@@ -86,17 +86,14 @@ where
         S: serde::Serializer,
     {
         let mut s = serializer.serialize_struct("SingletonStorage", 3)?;
-        if let Some(cell) = self.cell.get() {
-            s.serialize_field("cell", cell)?;
-        }
-        if let Some(key) = self.key.get() {
-            s.serialize_field("key", key)?;
-        }
-        if let Ok(lock) = self.value.lock() {
-            if let Some(value) = &*lock {
-                s.serialize_field("value", value)?;
-            }
-        }
+        s.serialize_field("cell", &self.cell.get())?;
+        s.serialize_field("key", &self.key.get())?;
+        let guard = self.value.lock().unwrap();
+
+        // When users store unit values in a singleton, this leads to `self.value`
+        // being `Some(())` or `None` which tagless encodings can't differentiate.
+        // So we wrap in a single element tuple to tell them apart.
+        s.serialize_field("value", &guard.as_ref().map(|value| (value,)))?;
         s.end()
     }
 }
@@ -126,7 +123,7 @@ struct SerializeWrapper<K: Computation> {
 
     #[serde(default)]
     #[serde(bound = "K::Output: Deserialize<'de>")]
-    value: Option<K::Output>,
+    value: Option<(K::Output,)>,
 }
 
 fn none<T>() -> Option<T> {
@@ -143,7 +140,7 @@ impl<K: Computation> SerializeWrapper<K> {
             Some(key) => std::sync::OnceLock::from(key),
             None => std::sync::OnceLock::new(),
         };
-        let value = std::sync::Mutex::new(self.value);
+        let value = std::sync::Mutex::new(self.value.map(|(value,)| value));
         SingletonStorage { cell, key, value }
     }
 }

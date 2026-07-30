@@ -23,14 +23,14 @@ const START_VERSION: u32 = 1;
 /// To use this, a type implementing `Storage` is required to be provided.
 /// See the documentation for `impl_storage!`.
 pub struct Db<Storage> {
-    cells: dashmap::DashMap<Cell, CellData>,
+    cells: dashmap::DashMap<Cell, CellData, rustc_hash::FxBuildHasher>,
     version: AtomicU32,
     next_cell: AtomicU32,
     storage: Storage,
 
     /// Lock used when acquiring new Cells to ensure the same data isn't assigned
     /// multiple ids concurrently. Maps computation_id to each lock.
-    cell_locks: dashmap::DashMap<u32, Arc<Mutex<()>>>,
+    cell_locks: dashmap::DashMap<u32, Arc<Mutex<()>>, rustc_hash::FxBuildHasher>,
 }
 
 impl<Storage: Default> Db<Storage> {

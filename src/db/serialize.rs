@@ -80,7 +80,8 @@ where
     {
         let db = DbDeserialize::deserialize(deserializer)?;
 
-        let cells = dashmap::DashMap::with_capacity(db.cells.len());
+        let cells =
+            dashmap::DashMap::with_capacity_and_hasher(db.cells.len(), rustc_hash::FxBuildHasher);
 
         for (cell, data) in db.cells {
             cells.insert(
