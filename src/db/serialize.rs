@@ -91,6 +91,7 @@ where
                     last_updated_version: data.last_updated_version,
                     last_run_version: data.last_run_version,
                     last_verified_version: data.last_verified_version,
+                    dependency_set: data.dependencies.iter().copied().collect(),
                     dependencies: data.dependencies,
                     input_dependencies: data.input_dependencies.into_iter().collect(),
                     lock: Arc::new(Mutex::new(())),

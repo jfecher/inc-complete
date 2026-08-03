@@ -18,6 +18,7 @@ pub(crate) struct CellData {
     pub(crate) last_run_version: u32,
     pub(crate) last_verified_version: u32,
     pub(crate) dependencies: Vec<Cell>,
+    pub(crate) dependency_set: HashSet<Cell, rustc_hash::FxBuildHasher>,
     pub(crate) input_dependencies: HashSet<Cell, rustc_hash::FxBuildHasher>,
     pub(crate) lock: Arc<parking_lot::Mutex<()>>,
 }
@@ -30,6 +31,7 @@ impl CellData {
             last_run_version: 0,
             last_verified_version: 0,
             dependencies: Vec::new(),
+            dependency_set: Default::default(),
             input_dependencies: Default::default(),
             lock: Arc::new(parking_lot::Mutex::new(())),
         }

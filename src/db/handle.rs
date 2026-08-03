@@ -24,6 +24,7 @@ impl<'db, S> DbHandle<'db, S> {
         let mut cell = db.cells.get_mut(&current_operation).unwrap();
 
         cell.dependencies.clear();
+        cell.dependency_set.clear();
         cell.input_dependencies.clear();
 
         Self {
@@ -64,9 +65,9 @@ impl<S: Storage> DbHandle<'_, S> {
     fn update_and_register_dependency_inner(&self, dependency: Cell, is_input: bool) {
         let mut cell = self.db.cells.get_mut(&self.current_operation).unwrap();
 
-        // TODO: Investigate whether this is faster than a separate hashset or insertion-ordered
-        // set in practice.
-        let newly_registered = !cell.dependencies.contains(&dependency);
+        // Storing dependency_set separately takes a hit to memory usage but is worth
+        // it for extra runtime performance on this check
+        let newly_registered = cell.dependency_set.insert(dependency);
         if newly_registered {
             cell.dependencies.push(dependency);
             if is_input {
@@ -90,9 +91,7 @@ impl<S: Storage> DbHandle<'_, S> {
         // `cell` but in practice the vast majority of computations will have at least 1 input dependency.
         if !dependency_inputs.is_empty() {
             let mut cell = self.db.cells.get_mut(&self.current_operation).unwrap();
-            for input in dependency_inputs {
-                cell.input_dependencies.insert(input);
-            }
+            cell.input_dependencies.extend(dependency_inputs);
         }
     }
 

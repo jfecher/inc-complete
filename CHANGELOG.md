@@ -1,3 +1,7 @@
+# 0.10.5
+
+- Optimized general queries: repeat dependency check now uses a separate hash set
+
 # 0.10.4
 
 - Fixed a bug where unit values stored in `SingletonStorage` would always be decoded as if no value where in the storage

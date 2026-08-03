@@ -225,18 +225,20 @@ impl<S: Storage> Db<S> {
     ///
     /// Note that this may re-compute some input
     fn is_stale_cell(&self, cell: Cell) -> bool {
-        let (computation_id, last_verified, inputs, dependencies) = self.with_cell(cell, |data| {
-            (
-                data.computation_id,
-                data.last_verified_version,
-                data.input_dependencies.clone(),
-                data.dependencies.clone(),
-            )
+        let state = self.with_cell(cell, |data| {
+            (!self.storage.output_is_unset(cell, data.computation_id)).then(|| {
+                (
+                    data.computation_id,
+                    data.last_verified_version,
+                    data.input_dependencies.clone(),
+                    data.dependencies.clone(),
+                )
+            })
         });
 
-        if self.storage.output_is_unset(cell, computation_id) {
+        let Some((computation_id, last_verified, inputs, dependencies)) = state else {
             return true;
-        }
+        };
 
         // Optimization: only recursively check all dependencies if any
         // of the inputs this cell depends on have changed
