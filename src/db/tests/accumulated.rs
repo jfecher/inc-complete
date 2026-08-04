@@ -67,9 +67,8 @@ define_intermediate!(3, MessUpErrorCount -> i32, Compiler, |_, db| {
 });
 
 /// Always returns 0, but accumulates Error(200) when File(0) is odd.
-/// Unlike MessUpErrorCount, this reads File(0) directly (no intermediate Parse),
-/// so the only dependency of Accumulated<Error>(direct_cell) that could indicate
-/// staleness is the input cell itself — which never changes its accumulated values.
+/// Unlike MessUpErrorCount, this reads File(0) directly, so the only dependency of
+/// Accumulated<Error> that could indicate staleness is the input cell itself.
 #[derive(Debug, Clone, Hash, PartialEq, Eq, Ord, PartialOrd)]
 struct DirectAccumulator;
 define_intermediate!(5, DirectAccumulator -> i32, Compiler, |_, db| {
@@ -146,12 +145,10 @@ fn accumulators_rerun_on_input_change() {
     assert_eq!(errors.len(), 2);
 }
 
-/// Regression test: accumulated values must be refreshed when the underlying cell re-ran
-/// (clearing and re-accumulating), even if its return value did not change.
-/// Unlike the MessUpErrorCount tests, DirectAccumulator reads File(0) directly with no
-/// changing intermediate, so Accumulated<Error>(direct_cell)'s only tracked dependency
-/// that could signal staleness via last_updated_version is the input cell itself — which
-/// has no accumulated values and thus never changes Accumulated<Error>(input_cell)'s output.
+/// Regression test: accumulated values must be refreshed when the underlying cell re-ran, even if
+/// its return value did not change. Unlike the MessUpErrorCount tests, DirectAccumulator reads
+/// File(0) directly with no changing intermediate, so Accumulated<Error>'s only tracked dependency
+/// that could signal staleness via last_updated_version is the input cell itself.
 #[test]
 fn accumulated_values_update_when_direct_input_changes_but_return_value_is_stable() {
     let mut db = Db::<Compiler>::new();

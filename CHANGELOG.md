@@ -1,3 +1,8 @@
+# 0.10.6
+
+- Fixed a data race in each storage type where a cell could be discovered by concurrent
+callers before the rest of that cell's data was written.
+
 # 0.10.5
 
 - Optimized general queries: repeat dependency check now uses a separate hash set

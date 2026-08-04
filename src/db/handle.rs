@@ -141,7 +141,7 @@ impl<S: Storage> DbHandle<'_, S> {
         let computation_id = Accumulated::<Item>::computation_id();
         let mut result: BTreeSet<Item> = dependencies
             .into_iter()
-            // Filter out `Accumulated<Item>` cells from the dep list — they exist for staleness
+            // Filter out `Accumulated<Item>` cells from the dep list. They exist for staleness
             // tracking only and must not be traversed for value collection, or we'd get duplicates.
             .filter(|&dep| self.db.with_cell(dep, |cell| cell.computation_id) != computation_id)
             .flat_map(|dependency| self.get(Accumulated::<Item>::new(dependency)))

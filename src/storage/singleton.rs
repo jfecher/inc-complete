@@ -33,13 +33,14 @@ where
     }
 
     fn insert_new_cell(&self, cell: Cell, key: K) {
+        // self.cell must be written last to avoid data races
+        let result = self.key.set(key);
+        result.unwrap_or_else(|_| panic!("insert_new_cell: cell already initialized"));
         assert!(
             self.cell.set(cell).is_ok(),
             "Overwriting previous singleton value - are you using SingleStorage<{}> with a non-singleton type?",
             std::any::type_name::<K>()
         );
-        let result = self.key.set(key);
-        result.unwrap_or_else(|_| panic!("insert_new_cell: cell already initialized"));
     }
 
     fn try_get_input(&self, cell: Cell) -> Option<K> {

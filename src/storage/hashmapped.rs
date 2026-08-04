@@ -38,8 +38,9 @@ where
     }
 
     fn insert_new_cell(&self, cell: Cell, key: K) {
-        self.key_to_cell.insert(key.clone(), cell);
-        self.cell_to_key.insert(cell, (key, None));
+        // key_to_cell must be written last to avoid data races
+        self.cell_to_key.insert(cell, (key.clone(), None));
+        self.key_to_cell.insert(key, cell);
     }
 
     fn try_get_input(&self, cell: Cell) -> Option<K> {
