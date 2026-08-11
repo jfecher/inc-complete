@@ -77,7 +77,6 @@ pub trait StorageFor<C: Computation> {
 
 pub trait Computation {
     type Output;
-    const IS_INPUT: bool;
     const ASSUME_CHANGED: bool;
 
     fn computation_id() -> u32;

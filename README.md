@@ -26,7 +26,7 @@ See the CHANGELOG.md for changes for each version.
 
 ## Planned Features & Roadmap
 
-- [ ] Support for interning arbitrary data (computations and results must currently be cloned)
+- [ ] Support for interning arbitrary data (computations and results must currently be cloned, so Arc wrappers are often used in the mean time)
 
 ## Quick Start
 

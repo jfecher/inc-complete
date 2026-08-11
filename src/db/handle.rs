@@ -25,7 +25,6 @@ impl<'db, S> DbHandle<'db, S> {
 
         cell.dependencies.clear();
         cell.dependency_set.clear();
-        cell.input_dependencies.clear();
 
         Self {
             db,
@@ -59,40 +58,21 @@ impl<S: Storage> DbHandle<'_, S> {
 
     /// Registers the given cell as a dependency, running it and updating any required metadata
     fn update_and_register_dependency<C: Computation>(&self, dependency: Cell) {
-        self.update_and_register_dependency_inner(dependency, C::IS_INPUT);
+        self.update_and_register_dependency_inner(dependency);
     }
 
-    fn update_and_register_dependency_inner(&self, dependency: Cell, is_input: bool) {
+    fn update_and_register_dependency_inner(&self, dependency: Cell) {
         let mut cell = self.db.cells.get_mut(&self.current_operation).unwrap();
 
         // Storing dependency_set separately takes a hit to memory usage but is worth
         // it for extra runtime performance on this check
-        let newly_registered = cell.dependency_set.insert(dependency);
-        if newly_registered {
+        if cell.dependency_set.insert(dependency) {
             cell.dependencies.push(dependency);
-            if is_input {
-                cell.input_dependencies.insert(dependency);
-            }
         }
         drop(cell);
 
         // Run the computation to update its dependencies before we query them afterward
         self.db.update_cell(dependency);
-
-        if !newly_registered {
-            return;
-        }
-
-        let dependency = self.db.cells.get(&dependency).unwrap();
-        let dependency_inputs = dependency.input_dependencies.clone();
-        drop(dependency);
-
-        // TODO: Is this check necessary? It is meant as an optimization to avoid unnecessarily acquiring
-        // `cell` but in practice the vast majority of computations will have at least 1 input dependency.
-        if !dependency_inputs.is_empty() {
-            let mut cell = self.db.cells.get_mut(&self.current_operation).unwrap();
-            cell.input_dependencies.extend(dependency_inputs);
-        }
     }
 
     /// Accumulate an item in the current computation. This item can be retrieved along
@@ -132,7 +112,7 @@ impl<S: Storage> DbHandle<'_, S> {
         Item: 'static + Ord,
         S: StorageFor<Accumulated<Item>> + Accumulate<Item>,
     {
-        self.update_and_register_dependency_inner(cell_id, false);
+        self.update_and_register_dependency_inner(cell_id);
         let dependencies = self.db.with_cell(cell_id, |cell| cell.dependencies.clone());
 
         // Collect `Accumulator` results from each dependency. This should also ensure we

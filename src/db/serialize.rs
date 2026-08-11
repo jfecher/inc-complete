@@ -22,7 +22,6 @@ where
 
         for item in self.cells.iter() {
             let value = item.value();
-            let input_dependencies: Vec<_> = value.input_dependencies.iter().copied().collect();
 
             cells.push((
                 *item.key(),
@@ -32,7 +31,6 @@ where
                     last_run_version: value.last_run_version,
                     last_verified_version: value.last_verified_version,
                     dependencies: value.dependencies.clone(),
-                    input_dependencies,
                 },
             ));
         }
@@ -67,7 +65,6 @@ struct CellDataDeserialize {
     last_run_version: u32,
     last_verified_version: u32,
     dependencies: Vec<Cell>,
-    input_dependencies: Vec<Cell>,
 }
 
 impl<'de, Storage> serde::Deserialize<'de> for Db<Storage>
@@ -93,7 +90,6 @@ where
                     last_verified_version: data.last_verified_version,
                     dependency_set: data.dependencies.iter().copied().collect(),
                     dependencies: data.dependencies,
-                    input_dependencies: data.input_dependencies.into_iter().collect(),
                     lock: Arc::new(Mutex::new(())),
                 },
             );

@@ -1,3 +1,12 @@
+# 0.11.0
+
+# Breaking
+
+- Removed the `input_dependencies` field and optimization. This optimization hurt performance in the general case to
+make programs without changes faster to run. On small programs this tradeoff looked okay but on larger ones the cost
+could grow to dominate the entire cost of inc-complete, so this has been removed. It may be revisited in the future
+with a different approach.
+
 # 0.10.6
 
 - Fixed a data race in each storage type where a cell could be discovered by concurrent

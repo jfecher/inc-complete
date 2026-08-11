@@ -78,7 +78,6 @@ pub(crate) const ACCUMULATED_COMPUTATION_ID: u32 = 0x54325243;
 
 impl<Item: 'static> Computation for Accumulated<Item> {
     type Output = BTreeSet<Item>;
-    const IS_INPUT: bool = false;
     const ASSUME_CHANGED: bool = false;
 
     fn computation_id() -> u32 {

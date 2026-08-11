@@ -45,7 +45,6 @@ macro_rules! define_intermediate {
     (@ $id:tt, $type_name:ident -> $output_type:ty, $assume_changed:expr, $( $storage_type:ty )|+, $run_function:expr) => {
         impl $crate::Computation for $type_name {
             type Output = $output_type;
-            const IS_INPUT: bool = false;
             const ASSUME_CHANGED: bool = $assume_changed;
 
             fn computation_id() -> u32 {
@@ -113,7 +112,6 @@ macro_rules! define_input {
     (@ $id:tt, $type_name:ident -> $output_type:ty, $assume_changed:expr, $( $storage_type:ty )|+ ) => {
         impl $crate::Computation for $type_name {
             type Output = $output_type;
-            const IS_INPUT: bool = true;
             const ASSUME_CHANGED: bool = $assume_changed;
 
             fn computation_id() -> u32 {

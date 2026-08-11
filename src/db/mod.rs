@@ -201,9 +201,7 @@ impl<S: Storage> Db<S> {
     }
 
     fn is_input(&self, cell: Cell) -> bool {
-        self.with_cell(cell, |cell| {
-            cell.dependencies.is_empty() && cell.input_dependencies.is_empty()
-        })
+        self.with_cell(cell, |cell| cell.dependencies.is_empty())
     }
 
     /// True if a given computation is stale and needs to be re-computed.
@@ -230,38 +228,28 @@ impl<S: Storage> Db<S> {
                 (
                     data.computation_id,
                     data.last_verified_version,
-                    data.input_dependencies.clone(),
                     data.dependencies.clone(),
                 )
             })
         });
 
-        let Some((computation_id, last_verified, inputs, dependencies)) = state else {
+        let Some((computation_id, last_verified, dependencies)) = state else {
             return true;
         };
-
-        // Optimization: only recursively check all dependencies if any
-        // of the inputs this cell depends on have changed
-        let inputs_changed = inputs.into_iter().any(|input_id| {
-            // This cell is stale if the dependency has been updated since
-            // we last verified this cell
-            self.with_cell(input_id, |input| input.last_updated_version > last_verified)
-        });
 
         // Dependencies need to be iterated in the order they were computed.
         // Otherwise we may re-run a computation which does not need to be re-run.
         // In the worst case this could even lead to panics - see the div0 test.
-        inputs_changed
-            && dependencies.into_iter().any(|dependency_id| {
-                self.update_cell(dependency_id);
-                self.with_cell(dependency_id, |dependency| {
-                    if computation_id == ACCUMULATED_COMPUTATION_ID {
-                        dependency.last_run_version > last_verified
-                    } else {
-                        dependency.last_updated_version > last_verified
-                    }
-                })
+        dependencies.into_iter().any(|dependency_id| {
+            self.update_cell(dependency_id);
+            self.with_cell(dependency_id, |dependency| {
+                if computation_id == ACCUMULATED_COMPUTATION_ID {
+                    dependency.last_run_version > last_verified
+                } else {
+                    dependency.last_updated_version > last_verified
+                }
             })
+        })
     }
 
     /// Similar to `update_input` but runs the compute function
