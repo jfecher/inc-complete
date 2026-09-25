@@ -1,3 +1,10 @@
+# 0.11.1
+
+- Lock contention should be greatly reduced
+- `StorageFor::get_or_insert_cell` has been added to more efficiently retrieve a cell or call a provided initializer function if one does not already exist.
+There is a default implementation so this is a non-breaking change, but the default impl uses a single lock which will block all calls. Any custom Storage impls
+should ideally implement more fine-grained locking if possible to reduce contention.
+
 # 0.11.0
 
 # Breaking

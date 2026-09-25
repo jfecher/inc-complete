@@ -239,6 +239,10 @@ macro_rules! impl_storage {
                 self.$field.insert_new_cell(cell, key)
             }
 
+            fn get_or_insert_cell(&self, key: $computation_type, new_cell: impl FnOnce() -> $crate::Cell) -> $crate::Cell {
+                self.$field.get_or_insert_cell(key, new_cell)
+            }
+
             fn try_get_input(&self, cell: $crate::Cell) -> Option<$computation_type> {
                 self.$field.try_get_input(cell)
             }

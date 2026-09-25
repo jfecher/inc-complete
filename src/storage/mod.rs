@@ -54,6 +54,28 @@ pub trait StorageFor<C: Computation> {
     /// Insert a new Cell with the given computation that has yet to be run
     fn insert_new_cell(&self, cell: Cell, key: C);
 
+    /// Return the cell for `key`, calling `new_cell` to create one if none exists.
+    ///
+    /// `new_cell` must be called at most once per key, even when racing other threads.
+    /// The default implementation serializes all insertions through one global lock,
+    /// storages should ideally override it with something finer-grained.
+    fn get_or_insert_cell(&self, key: C, new_cell: impl FnOnce() -> Cell) -> Cell {
+        static INSERT_LOCK: parking_lot::Mutex<()> = parking_lot::Mutex::new(());
+
+        if let Some(cell) = self.get_cell_for_computation(&key) {
+            return cell;
+        }
+
+        let _guard = INSERT_LOCK.lock();
+        if let Some(cell) = self.get_cell_for_computation(&key) {
+            return cell;
+        }
+
+        let cell = new_cell();
+        self.insert_new_cell(cell, key);
+        cell
+    }
+
     /// Retrieve the input for this computation, returning `None` if not found.
     fn try_get_input(&self, cell: Cell) -> Option<C>;
 

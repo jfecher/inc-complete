@@ -1,7 +1,7 @@
 use std::{collections::BTreeSet, marker::PhantomData};
 
 use dashmap::DashMap;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, ser::SerializeSeq};
 
 use crate::{Cell, Computation, Run, Storage, StorageFor};
 
@@ -22,7 +22,7 @@ pub trait Accumulate<Item> {
 }
 
 pub struct Accumulator<Item> {
-    map: DashMap<Cell, Vec<Item>>,
+    map: DashMap<Cell, Vec<Item>, rustc_hash::FxBuildHasher>,
 }
 
 impl<Item> Default for Accumulator<Item> {
@@ -35,7 +35,10 @@ impl<Item> Default for Accumulator<Item> {
 
 impl<Item> Accumulator<Item> {
     pub fn clear(&self, cell: Cell) {
-        self.map.remove(&cell);
+        // Avoid `remove`'s lock in the common case when nothing was accumulated in this cell
+        if self.map.contains_key(&cell) {
+            self.map.remove(&cell);
+        }
     }
 }
 
@@ -100,13 +103,12 @@ impl<Item: Serialize + Clone> Serialize for Accumulator<Item> {
     where
         S: serde::Serializer,
     {
-        let vec: Vec<(Cell, Vec<Item>)> = self
-            .map
-            .iter()
-            .map(|entry| (*entry.key(), entry.value().clone()))
-            .collect();
-
-        vec.serialize(serializer)
+        // This should be faster than serializing a `Vec<(Cell, Vec<Item>)>`
+        let mut seq = serializer.serialize_seq(Some(self.map.len()))?;
+        for entry in self.map.iter() {
+            seq.serialize_element(&(entry.key(), entry.value()))?;
+        }
+        seq.end()
     }
 }
 

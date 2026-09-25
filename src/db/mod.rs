@@ -1,9 +1,8 @@
 use std::collections::BTreeSet;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use crate::accumulate::{ACCUMULATED_COMPUTATION_ID, Accumulate, Accumulated};
-use crate::cell::CellData;
+use crate::cell::{CellData, CellTable};
 use crate::storage::StorageFor;
 use crate::{Cell, Computation, Storage};
 
@@ -13,24 +12,22 @@ mod serialize;
 mod tests;
 
 pub use handle::DbHandle;
-use parking_lot::Mutex;
 use rustc_hash::FxHashSet;
 
 const START_VERSION: u32 = 1;
+
+/// How far past the next cell id to grow the cell table before creating a new cell
+const RESERVE_AHEAD: u32 = 256;
 
 /// The central database object to manage and cache incremental computations.
 ///
 /// To use this, a type implementing `Storage` is required to be provided.
 /// See the documentation for `impl_storage!`.
 pub struct Db<Storage> {
-    cells: dashmap::DashMap<Cell, CellData, rustc_hash::FxBuildHasher>,
+    cells: CellTable,
     version: AtomicU32,
     next_cell: AtomicU32,
     storage: Storage,
-
-    /// Lock used when acquiring new Cells to ensure the same data isn't assigned
-    /// multiple ids concurrently. Maps computation_id to each lock.
-    cell_locks: dashmap::DashMap<u32, Arc<Mutex<()>>, rustc_hash::FxBuildHasher>,
 }
 
 impl<Storage: Default> Db<Storage> {
@@ -71,7 +68,6 @@ impl<S> Db<S> {
             cells: Default::default(),
             version: AtomicU32::new(START_VERSION),
             next_cell: AtomicU32::new(0),
-            cell_locks: Default::default(),
             storage,
         }
     }
@@ -87,6 +83,12 @@ impl<S> Db<S> {
     /// Using this incorrectly may break correctness!
     pub fn storage_mut(&mut self) -> &mut S {
         &mut self.storage
+    }
+
+    pub(crate) fn cell(&self, cell: Cell) -> &CellData {
+        self.cells
+            .get(cell)
+            .unwrap_or_else(|| panic!("inc-complete internal error: {cell:?} has no data"))
     }
 }
 
@@ -110,25 +112,19 @@ impl<S: Storage> Db<S> {
             return cell;
         }
 
-        // Cell doesn't exist yet, we need to lock & create a unique Cell for this input
-        let computation_id = C::computation_id();
-        let lock = self.cell_locks.entry(computation_id).or_default().clone();
-        let _guard = lock.lock();
+        // Growing the table is slow, so do it before the storage takes any locks
+        let upcoming = self
+            .next_cell
+            .load(Ordering::Relaxed)
+            .saturating_add(RESERVE_AHEAD);
+        self.cells.reserve(Cell::new(upcoming));
 
-        // Need to check get_cell again in case another thread created this Cell after
-        // our get_cell call but before we acquired the lock
-        if let Some(cell) = self.get_cell(&input) {
+        self.storage.get_or_insert_cell(input, || {
+            // We just need a unique ID here, ordering between threads doesn't matter
+            let cell = Cell::new(self.next_cell.fetch_add(1, Ordering::Relaxed));
+            self.cells.insert(cell, CellData::new(C::computation_id()));
             cell
-        } else {
-            // We just need a unique ID here, we don't care about ordering between
-            // threads, so we're using Ordering::Relaxed.
-            let cell_id = self.next_cell.fetch_add(1, Ordering::Relaxed);
-            let new_cell = Cell::new(cell_id);
-
-            self.cells.insert(new_cell, CellData::new(computation_id));
-            self.storage.insert_new_cell(new_cell, input);
-            new_cell
-        }
+        })
     }
 
     fn handle(&self, cell: Cell) -> DbHandle<'_, S> {
@@ -145,7 +141,7 @@ impl<S: Storage> Db<S> {
             .get_cell(input)
             .unwrap_or_else(|| panic!("unwrap_cell_value: Expected cell to exist"));
 
-        self.cells.get(&cell).map(|value| f(&value)).unwrap()
+        f(self.cell(cell))
     }
 
     pub fn version(&self) -> u32 {
@@ -156,13 +152,8 @@ impl<S: Storage> Db<S> {
         let used_cells: std::collections::HashSet<Cell> = self
             .cells
             .iter()
-            .filter_map(|entry| {
-                if entry.value().last_verified_version >= version {
-                    Some(entry.key().clone())
-                } else {
-                    None
-                }
-            })
+            .filter(|(_, data)| data.last_verified_version() >= version)
+            .map(|(cell, _)| cell)
             .collect();
 
         self.storage.gc(&used_cells);
@@ -189,19 +180,19 @@ impl<S: Storage> Db<S> {
         );
 
         let changed = self.storage.update_output(cell_id, new_value);
-        let mut cell = self.cells.get_mut(&cell_id).unwrap();
+        let cell = self.cell(cell_id);
 
         if changed {
             let version = self.version.fetch_add(1, Ordering::SeqCst) + 1;
-            cell.last_updated_version = version;
-            cell.last_verified_version = version;
+            cell.set_last_updated_version(version);
+            cell.set_last_verified_version(version);
         } else {
-            cell.last_verified_version = self.version.load(Ordering::SeqCst);
+            cell.set_last_verified_version(self.version.load(Ordering::SeqCst));
         }
     }
 
     fn is_input(&self, cell: Cell) -> bool {
-        self.with_cell(cell, |cell| cell.dependencies.is_empty())
+        !self.cell(cell).has_dependencies()
     }
 
     /// True if a given computation is stale and needs to be re-computed.
@@ -223,32 +214,26 @@ impl<S: Storage> Db<S> {
     ///
     /// Note that this may re-compute some input
     fn is_stale_cell(&self, cell: Cell) -> bool {
-        let state = self.with_cell(cell, |data| {
-            (!self.storage.output_is_unset(cell, data.computation_id)).then(|| {
-                (
-                    data.computation_id,
-                    data.last_verified_version,
-                    data.dependencies.clone(),
-                )
-            })
-        });
-
-        let Some((computation_id, last_verified, dependencies)) = state else {
+        let data = self.cell(cell);
+        let computation_id = data.computation_id;
+        if self.storage.output_is_unset(cell, computation_id) {
             return true;
-        };
+        }
+
+        let last_verified = data.last_verified_version();
+        let dependencies = data.dependencies();
 
         // Dependencies need to be iterated in the order they were computed.
         // Otherwise we may re-run a computation which does not need to be re-run.
         // In the worst case this could even lead to panics - see the div0 test.
         dependencies.into_iter().any(|dependency_id| {
             self.update_cell(dependency_id);
-            self.with_cell(dependency_id, |dependency| {
-                if computation_id == ACCUMULATED_COMPUTATION_ID {
-                    dependency.last_run_version > last_verified
-                } else {
-                    dependency.last_updated_version > last_verified
-                }
-            })
+            let dependency = self.cell(dependency_id);
+            if computation_id == ACCUMULATED_COMPUTATION_ID {
+                dependency.last_run_version() > last_verified
+            } else {
+                dependency.last_updated_version() > last_verified
+            }
         })
     }
 
@@ -256,50 +241,53 @@ impl<S: Storage> Db<S> {
     /// instead of accepting a given value. This also will not update
     /// `self.version`
     fn run_compute_function(&self, cell_id: Cell) {
-        let computation_id = self.with_cell(cell_id, |data| data.computation_id);
+        let cell = self.cell(cell_id);
         self.storage.clear_accumulated_for_cell(cell_id);
         let handle = self.handle(cell_id);
-        let changed = S::run_computation(&handle, cell_id, computation_id);
+        let changed = S::run_computation(&handle, cell_id, cell.computation_id);
 
         let version = self.version.load(Ordering::SeqCst);
-        let mut cell = self.cells.get_mut(&cell_id).unwrap();
-        cell.last_verified_version = version;
-        cell.last_run_version = version;
+        cell.set_last_run_version(version);
 
         if changed {
-            cell.last_updated_version = version;
+            cell.set_last_updated_version(version);
         }
+
+        // Written last since other threads check it before reading anything else
+        cell.set_last_verified_version(version);
     }
 
     /// Trigger an update of the given cell, recursively checking and re-running any out of date
     /// dependencies.
     fn update_cell(&self, cell_id: Cell) {
-        let last_verified_version = self.with_cell(cell_id, |data| data.last_verified_version);
+        let cell = self.cell(cell_id);
         let version = self.version.load(Ordering::SeqCst);
 
-        if last_verified_version != version {
+        while cell.last_verified_version() != version {
             // if any dependency may have changed, update
-            if self.is_stale_cell(cell_id) {
-                let lock = self.with_cell(cell_id, |cell| cell.lock.clone());
+            if !self.is_stale_cell(cell_id) {
+                cell.set_last_verified_version(version);
+                return;
+            }
 
-                match lock.try_lock() {
-                    Some(guard) => {
+            match cell.lock.try_lock() {
+                Some(guard) => {
+                    // Another thread may have finished running this cell before we took the lock
+                    if cell.last_verified_version() != version {
                         self.run_compute_function(cell_id);
-                        drop(guard);
                     }
-                    None => {
-                        // This computation is already being run in another thread.
-                        // Before blocking and waiting, since we have time, check for a cycle and
-                        // issue and panic if found.
-                        self.check_for_cycle(cell_id);
-
-                        // Block until it finishes and return the result
-                        drop(lock.lock());
-                    }
+                    drop(guard);
+                    return;
                 }
-            } else {
-                let mut cell = self.cells.get_mut(&cell_id).unwrap();
-                cell.last_verified_version = version;
+                None => {
+                    // This computation is already being run in another thread.
+                    // Before blocking and waiting, since we have time, check for a cycle and
+                    // issue and panic if found.
+                    self.check_for_cycle(cell_id);
+
+                    // Block until it finishes, then loop in case that thread panicked before finishing
+                    drop(cell.lock.lock());
+                }
             }
         }
     }
@@ -335,10 +323,8 @@ impl<S: Storage> Db<S> {
                     if visited.insert(cell) {
                         path.push(cell);
                         stack.push(Action::Pop(cell));
-                        self.with_cell(cell, |cell| {
-                            for dependency in cell.dependencies.iter() {
-                                stack.push(Action::Traverse(*dependency));
-                            }
+                        self.cell(cell).for_each_dependency(|dependency| {
+                            stack.push(Action::Traverse(*dependency));
                         });
                     }
                 }
@@ -383,10 +369,6 @@ impl<S: Storage> Db<S> {
         self.storage
             .get_output(cell_id)
             .expect("cell result should have been computed already")
-    }
-
-    fn with_cell<R>(&self, cell: Cell, f: impl FnOnce(&CellData) -> R) -> R {
-        f(&self.cells.get(&cell).unwrap())
     }
 
     /// Retrieve each accumulated value of the given type after the given computation is run.
@@ -434,7 +416,8 @@ impl<S: Storage> Db<S> {
 
         while let Some(cell) = queue.pop() {
             if visited.insert(cell) {
-                self.with_cell(cell, |data| queue.extend_from_slice(&data.dependencies));
+                self.cell(cell)
+                    .for_each_dependency(|dependency| queue.push(*dependency));
                 items.extend(self.storage().get_accumulated::<Vec<Item>>(cell));
             }
         }

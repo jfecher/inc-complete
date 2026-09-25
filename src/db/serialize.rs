@@ -1,12 +1,9 @@
-use std::sync::{
-    Arc,
-    atomic::{AtomicU32, Ordering},
-};
+use std::sync::atomic::{AtomicU32, Ordering};
 
-use parking_lot::Mutex;
 use serde::{Deserialize, Serialize, ser::SerializeStruct};
 
 use crate::Cell;
+use crate::cell::{CellData, CellTable};
 
 use super::Db;
 
@@ -18,22 +15,20 @@ where
     where
         S: serde::Serializer,
     {
-        let mut cells = Vec::with_capacity(self.cells.len());
-
-        for item in self.cells.iter() {
-            let value = item.value();
-
-            cells.push((
-                *item.key(),
-                CellDataDeserialize {
+        let cells: Vec<_> = self
+            .cells
+            .iter()
+            .map(|(cell, value)| {
+                let data = CellDataDeserialize {
                     computation_id: value.computation_id,
-                    last_updated_version: value.last_updated_version,
-                    last_run_version: value.last_run_version,
-                    last_verified_version: value.last_verified_version,
-                    dependencies: value.dependencies.clone(),
-                },
-            ));
-        }
+                    last_updated_version: value.last_updated_version(),
+                    last_run_version: value.last_run_version(),
+                    last_verified_version: value.last_verified_version(),
+                    dependencies: value.dependencies(),
+                };
+                (cell, data)
+            })
+            .collect();
 
         let version = self.version.load(Ordering::SeqCst);
         let next_cell = self.next_cell.load(Ordering::SeqCst);
@@ -77,29 +72,23 @@ where
     {
         let db = DbDeserialize::deserialize(deserializer)?;
 
-        let cells =
-            dashmap::DashMap::with_capacity_and_hasher(db.cells.len(), rustc_hash::FxBuildHasher);
+        let cells = CellTable::default();
 
         for (cell, data) in db.cells {
-            cells.insert(
-                cell,
-                crate::cell::CellData {
-                    computation_id: data.computation_id,
-                    last_updated_version: data.last_updated_version,
-                    last_run_version: data.last_run_version,
-                    last_verified_version: data.last_verified_version,
-                    dependency_set: data.dependencies.iter().copied().collect(),
-                    dependencies: data.dependencies,
-                    lock: Arc::new(Mutex::new(())),
-                },
+            let data = CellData::with_versions(
+                data.computation_id,
+                data.last_updated_version,
+                data.last_run_version,
+                data.last_verified_version,
+                data.dependencies,
             );
+            cells.insert(cell, data);
         }
 
         Ok(Db {
             cells,
             version: AtomicU32::new(db.version),
             next_cell: AtomicU32::new(db.next_cell),
-            cell_locks: Default::default(),
             storage: db.storage,
         })
     }

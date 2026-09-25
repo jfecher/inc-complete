@@ -72,17 +72,17 @@ fn no_recompute_basic() {
     assert_eq!(db.version(), expected_version);
 
     db.with_cell_data(&A1, |a1| {
-        assert_eq!(a1.last_updated_version, expected_version);
-        assert_eq!(a1.last_verified_version, expected_version);
+        assert_eq!(a1.last_updated_version(), expected_version);
+        assert_eq!(a1.last_verified_version(), expected_version);
     });
 
     db.with_cell_data(&A2, |a2| {
-        assert_eq!(a2.last_updated_version, expected_version);
-        assert_eq!(a2.last_verified_version, expected_version);
+        assert_eq!(a2.last_updated_version(), expected_version);
+        assert_eq!(a2.last_verified_version(), expected_version);
     });
 
     db.with_cell_data(&A3, |a3| {
-        assert_eq!(a3.last_updated_version, expected_version);
-        assert_eq!(a3.last_verified_version, expected_version);
+        assert_eq!(a3.last_updated_version(), expected_version);
+        assert_eq!(a3.last_verified_version(), expected_version);
     });
 }

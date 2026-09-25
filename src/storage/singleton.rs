@@ -43,6 +43,15 @@ where
         );
     }
 
+    fn get_or_insert_cell(&self, key: K, new_cell: impl FnOnce() -> Cell) -> Cell {
+        *self.cell.get_or_init(|| {
+            // self.key must be set before self.cell is visible to other threads
+            let result = self.key.set(key);
+            result.unwrap_or_else(|_| panic!("get_or_insert_cell: key already initialized"));
+            new_cell()
+        })
+    }
+
     fn try_get_input(&self, cell: Cell) -> Option<K> {
         if cell == self.cell.get().cloned()? {
             self.key.get().cloned()

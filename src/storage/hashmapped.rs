@@ -1,4 +1,5 @@
-use dashmap::DashMap;
+use dashmap::{DashMap, mapref::entry::Entry};
+use serde::ser::SerializeSeq;
 
 use crate::{Cell, storage::StorageFor};
 use std::hash::{BuildHasher, Hash};
@@ -43,6 +44,23 @@ where
         self.key_to_cell.insert(key, cell);
     }
 
+    fn get_or_insert_cell(&self, key: K, new_cell: impl FnOnce() -> Cell) -> Cell {
+        if let Some(cell) = self.get_cell_for_computation(&key) {
+            return cell;
+        }
+
+        // The entry holds this key's shard lock so only one thread can create its cell
+        match self.key_to_cell.entry(key) {
+            Entry::Occupied(entry) => *entry.get(),
+            Entry::Vacant(entry) => {
+                let cell = new_cell();
+                self.cell_to_key.insert(cell, (entry.key().clone(), None));
+                entry.insert(cell);
+                cell
+            }
+        }
+    }
+
     fn try_get_input(&self, cell: Cell) -> Option<K> {
         let key_ref = self.cell_to_key.get(&cell)?;
         Some(key_ref.0.clone())
@@ -84,16 +102,11 @@ where
     where
         S: serde::Serializer,
     {
-        let mut cell_to_key_vec: Vec<(Cell, (K, Option<K::Output>))> =
-            Vec::with_capacity(self.cell_to_key.len());
-
+        let mut seq = serializer.serialize_seq(Some(self.cell_to_key.len()))?;
         for kv in self.cell_to_key.iter() {
-            let cell = *kv.key();
-            let (key, value) = kv.value().clone();
-            cell_to_key_vec.push((cell, (key, value)));
+            seq.serialize_element(&(kv.key(), kv.value()))?;
         }
-
-        cell_to_key_vec.serialize(serializer)
+        seq.end()
     }
 }
 

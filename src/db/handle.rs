@@ -21,10 +21,7 @@ pub struct DbHandle<'db, S> {
 impl<'db, S> DbHandle<'db, S> {
     pub(crate) fn new(db: &'db Db<S>, current_operation: Cell) -> Self {
         // We're re-running a cell so remove any past dependencies
-        let mut cell = db.cells.get_mut(&current_operation).unwrap();
-
-        cell.dependencies.clear();
-        cell.dependency_set.clear();
+        db.cell(current_operation).clear_dependencies();
 
         Self {
             db,
@@ -48,28 +45,20 @@ impl<S: Storage> DbHandle<'_, S> {
     where
         S: StorageFor<C>,
     {
-        // Register the dependency
+        // Register the dependency, running it if out of date
         let dependency = self.db.get_or_insert_cell(compute);
-        self.update_and_register_dependency::<C>(dependency);
+        self.update_and_register_dependency_inner(dependency);
 
-        // Fetch the current value of the dependency, running it if out of date
-        self.db.get_with_cell(dependency)
+        self.storage()
+            .get_output(dependency)
+            .expect("cell result should have been computed already")
     }
 
     /// Registers the given cell as a dependency, running it and updating any required metadata
-    fn update_and_register_dependency<C: Computation>(&self, dependency: Cell) {
-        self.update_and_register_dependency_inner(dependency);
-    }
-
     fn update_and_register_dependency_inner(&self, dependency: Cell) {
-        let mut cell = self.db.cells.get_mut(&self.current_operation).unwrap();
-
-        // Storing dependency_set separately takes a hit to memory usage but is worth
-        // it for extra runtime performance on this check
-        if cell.dependency_set.insert(dependency) {
-            cell.dependencies.push(dependency);
-        }
-        drop(cell);
+        self.db
+            .cell(self.current_operation)
+            .add_dependency(dependency);
 
         // Run the computation to update its dependencies before we query them afterward
         self.db.update_cell(dependency);
@@ -113,7 +102,7 @@ impl<S: Storage> DbHandle<'_, S> {
         S: StorageFor<Accumulated<Item>> + Accumulate<Item>,
     {
         self.update_and_register_dependency_inner(cell_id);
-        let dependencies = self.db.with_cell(cell_id, |cell| cell.dependencies.clone());
+        let dependencies = self.db.cell(cell_id).dependencies();
 
         // Collect `Accumulator` results from each dependency. This should also ensure we
         // rerun this if any dependency changes, even if `cell_id` is updated such that it
@@ -123,7 +112,7 @@ impl<S: Storage> DbHandle<'_, S> {
             .into_iter()
             // Filter out `Accumulated<Item>` cells from the dep list. They exist for staleness
             // tracking only and must not be traversed for value collection, or we'd get duplicates.
-            .filter(|&dep| self.db.with_cell(dep, |cell| cell.computation_id) != computation_id)
+            .filter(|&dep| self.db.cell(dep).computation_id != computation_id)
             .flat_map(|dependency| self.get(Accumulated::<Item>::new(dependency)))
             .collect();
 

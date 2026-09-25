@@ -1,4 +1,5 @@
 use scc::{TreeIndex, ebr::Guard};
+use serde::ser::SerializeSeq;
 
 use crate::{Cell, storage::StorageFor};
 
@@ -10,6 +11,8 @@ use super::Computation;
 pub struct TreeIndexStorage<K: Computation> {
     key_to_cell: TreeIndex<K, Cell>,
     cell_to_key: TreeIndex<Cell, (K, Option<K::Output>)>,
+
+    insert_lock: parking_lot::Mutex<()>,
 }
 
 impl<K: Computation> Default for TreeIndexStorage<K> {
@@ -17,6 +20,7 @@ impl<K: Computation> Default for TreeIndexStorage<K> {
         Self {
             key_to_cell: Default::default(),
             cell_to_key: Default::default(),
+            insert_lock: Default::default(),
         }
     }
 }
@@ -34,6 +38,21 @@ where
         // key_to_cell must be written last to avoid data races
         self.cell_to_key.insert(cell, (key.clone(), None)).ok();
         self.key_to_cell.insert(key, cell).ok();
+    }
+
+    fn get_or_insert_cell(&self, key: K, new_cell: impl FnOnce() -> Cell) -> Cell {
+        if let Some(cell) = self.get_cell_for_computation(&key) {
+            return cell;
+        }
+
+        let _guard = self.insert_lock.lock();
+        if let Some(cell) = self.get_cell_for_computation(&key) {
+            return cell;
+        }
+
+        let cell = new_cell();
+        self.insert_new_cell(cell, key);
+        cell
     }
 
     fn try_get_input(&self, cell: Cell) -> Option<K> {
@@ -92,15 +111,12 @@ where
     where
         S: serde::Serializer,
     {
-        let mut cell_to_key_vec: Vec<(Cell, (K, Option<K::Output>))> =
-            Vec::with_capacity(self.cell_to_key.len());
-
+        let mut seq = serializer.serialize_seq(Some(self.cell_to_key.len()))?;
         let guard = Guard::new();
-        for (cell, (key, value)) in self.cell_to_key.iter(&guard) {
-            cell_to_key_vec.push((*cell, (key.clone(), value.clone())));
+        for entry in self.cell_to_key.iter(&guard) {
+            seq.serialize_element(&entry)?;
         }
-
-        cell_to_key_vec.serialize(serializer)
+        seq.end()
     }
 }
 
@@ -127,6 +143,7 @@ where
         Ok(TreeIndexStorage {
             cell_to_key,
             key_to_cell,
+            insert_lock: Default::default(),
         })
     }
 }
