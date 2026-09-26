@@ -411,15 +411,20 @@ impl<S: Storage> Db<S> {
         self.update_cell(cell_id);
 
         let mut items = BTreeSet::new();
-        let mut visited = BTreeSet::new();
         let mut queue = vec![cell_id];
 
+        let mut visited = vec![false; self.next_cell.load(Ordering::Relaxed) as usize];
+        visited[cell_id.index() as usize] = true;
+
         while let Some(cell) = queue.pop() {
-            if visited.insert(cell) {
-                self.cell(cell)
-                    .for_each_dependency(|dependency| queue.push(*dependency));
-                items.extend(self.storage().get_accumulated::<Vec<Item>>(cell));
-            }
+            self.cell(cell).for_each_dependency(|dependency| {
+                let seen = &mut visited[dependency.index() as usize];
+                if !*seen {
+                    *seen = true;
+                    queue.push(*dependency);
+                }
+            });
+            items.extend(self.storage().get_accumulated::<Vec<Item>>(cell));
         }
 
         items

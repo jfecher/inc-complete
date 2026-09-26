@@ -1,3 +1,7 @@
+# 0.11.2
+
+- Sped up `get_accumulated_uncached` calls
+
 # 0.11.1
 
 - Lock contention should be greatly reduced
