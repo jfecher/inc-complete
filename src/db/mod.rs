@@ -223,6 +223,12 @@ impl<S: Storage> Db<S> {
         let last_verified = data.last_verified_version();
         let dependencies = data.dependencies();
 
+        // Reporting this stale makes `update_cell` wait for an existing run instead
+        if data.lock.is_locked() {
+            return true;
+        }
+        std::sync::atomic::fence(Ordering::Acquire);
+
         // Dependencies need to be iterated in the order they were computed.
         // Otherwise we may re-run a computation which does not need to be re-run.
         // In the worst case this could even lead to panics - see the div0 test.

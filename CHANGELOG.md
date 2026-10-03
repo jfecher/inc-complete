@@ -1,3 +1,7 @@
+# 0.11.3
+
+- Fixed a race bug when reading dependencies of a cell
+
 # 0.11.2
 
 - Sped up `get_accumulated_uncached` calls
